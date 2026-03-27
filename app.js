@@ -376,17 +376,68 @@ window.clearHistFilter=function(){
   renderHistory();
 };
 
-window.renderHistory=function(){
+window.renderHistory = async function(){
   const pid    = document.getElementById('hist-patient').value;
   const from   = document.getElementById('hist-date-from').value;
   const to     = document.getElementById('hist-date-to').value;
   const status = document.getElementById('hist-status').value;
+  const page   = window._historyPage || 1;
+  const container = document.getElementById('history-list');
+  container.innerHTML = '<div class="card"><div class="empty-state">Loading…</div></div>';
 
-  let logs = window._vitalsLog.slice();
-  if(pid)  logs = logs.filter(l => l.patientId === pid);
-  if(from) logs = logs.filter(l => l.time && l.time >= from);
-  if(to)   logs = logs.filter(l => l.time && l.time.slice(0,10) <= to);
+  const params = new URLSearchParams({ page, limit:100 });
+  if (pid)  params.set('patientId', pid);
+  if (from) params.set('from', from);
+  if (to)   params.set('to', to);
+  if (status === 'abnormal') params.set('abnormal','true');
 
+  try {
+    const token = localStorage.getItem('meditrack_token') || '';
+    const res   = await fetch('/api/vitals/history?'+params.toString(),
+      { headers:{ 'Authorization':'Bearer '+token } });
+    const json  = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    const { entries, total, pages } = json.data;
+
+    const logs = entries.map(r => {
+      const l = normalizeVital(r);
+      const as=parseFloat(l.spo2)<94, ap=parseFloat(l.pulse)>110||parseFloat(l.pulse)<50;
+      const at=parseFloat(l.temp)>101||parseFloat(l.temp)<96, ag=parseFloat(l.glucose)>180||parseFloat(l.glucose)<70;
+      return {...l,_abnormal:as||ap||at||ag,_as:as,_ap:ap,_at:at,_ag:ag};
+    });
+
+    if (!logs.length) {
+      container.innerHTML='<div class="card"><div class="empty-state">No vitals records match.</div></div>';
+      return;
+    }
+    const rows = logs.map(l => {
+      const p=getPatient(l.patientId);
+      const t=l.time?new Date(l.time).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'}):'—';
+      return `<div class="history-row${l._abnormal?' rpt-row-abnormal':''}">
+        <span class="time-badge">${t}</span>
+        <div><div style="font-size:13px;font-weight:500">${p?p.name:'Unknown'}</div>
+        <div class="vitals-chips">
+          <span class="v-chip${l._ap?' abnormal':''}">Pulse ${l.pulse||'—'} bpm</span>
+          <span class="v-chip">BP ${l.bp||'—'}</span>
+          <span class="v-chip${l._at?' abnormal':''}">Temp ${l.temp||'—'}°F</span>
+          <span class="v-chip${l._as?' abnormal':''}">SpO2 ${l.spo2||'—'}%</span>
+        </div></div>
+      </div>`;
+    }).join('');
+
+    const pgHtml = pages>1 ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid var(--b2)">
+        <span style="font-size:12px;color:var(--t3)">Page ${page} of ${pages} · ${total} records</span>
+        <div style="display:flex;gap:8px">
+          ${page>1?`<button class="btn sm" onclick="window._historyPage=${page-1};window.renderHistory()">← Prev</button>`:''}
+          ${page<pages?`<button class="btn sm" onclick="window._historyPage=${page+1};window.renderHistory()">Next →</button>`:''}
+        </div>
+      </div>` : '';
+    container.innerHTML=`<div class="card">${rows}${pgHtml}</div>`;
+  } catch(e) {
+    container.innerHTML=`<div class="card"><div class="empty-state" style="color:#c0392b">Failed: ${e.message}</div></div>`;
+  }
+};
   // Annotate abnormal flags
   logs = logs.map(l => {
     const as = parseFloat(l.spo2) < 94;
