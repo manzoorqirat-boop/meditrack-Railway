@@ -844,18 +844,16 @@
 
       <div class="staff-section-row">
         <div class="staff-section-label">🩺 Doctors</div>
-        <button class="btn primary sm" onclick="openAddStaff('doctor')">+ Add Doctor</button>
       </div>
       <div class="staff-grid" id="staff-grid-doctors">
-        <div class="staff-empty">No doctors added yet. Click <b>+ Add Doctor</b> to get started.</div>
+        <div class="staff-empty">No doctors added yet. Add a user with the Doctor role to see them here.</div>
       </div>
 
       <div class="staff-section-row">
         <div class="staff-section-label">💊 Nurses &amp; Staff</div>
-        <button class="btn primary sm" onclick="openAddStaff('nurse')">+ Add Nurse</button>
       </div>
       <div class="staff-grid" id="staff-grid-nurses">
-        <div class="staff-empty">No nurses added yet. Click <b>+ Add Nurse</b> to get started.</div>
+        <div class="staff-empty">No nurses or staff added yet. Add users with Nurse or Staff roles to see them here.</div>
       </div>
     </div>
 
@@ -966,8 +964,8 @@
           <div class="auth-error" id="login-error"></div>
           <div class="auth-success" id="login-success"></div>
           <div class="form-group" style="margin-bottom:14px">
-            <label>Email Address</label>
-            <input id="login-email" type="email" placeholder="name@hospital.com">
+            <label>Username</label>
+            <input id="login-email" type="text" placeholder="Enter your username" autocomplete="username">
           </div>
           <div class="form-group" style="margin-bottom:20px">
             <label>Password</label>
@@ -1007,7 +1005,8 @@
               <option value="admin">Admin</option>
             </select>
           </div>
-          <div class="form-group"><label>Email Address *</label><input id="cu-email" type="email" placeholder="name@hospital.com"></div>
+          <div class="form-group"><label>Username *</label><input id="cu-username" type="text" placeholder="e.g. dr.aisha" autocomplete="off"></div>
+          <div class="form-group"><label>Email Address</label><input id="cu-email" type="email" placeholder="name@hospital.com (optional)"></div>
           <div class="form-group"><label>Mobile</label><input id="cu-mobile" type="tel" placeholder="+91 98765 43210"></div>
           <div class="form-group"><label>Department</label>
             <select id="cu-dept">
@@ -1017,7 +1016,7 @@
               <option>Nursing</option><option>Administration</option><option>Pharmacy</option>
             </select>
           </div>
-          <div class="form-group"><label>Employee ID</label><input id="cu-empid" placeholder="e.g. EMP-2024-001"></div>
+          <div class="form-group"><label>Qualification</label><input id="cu-qual" placeholder="e.g. MBBS, MD (optional)"></div>
           <div class="form-group"><label>Temporary Password *</label>
             <div class="input-password-wrap">
               <input id="cu-pw" type="password" placeholder="Min 8 characters" oninput="checkStrength(this.value,'cu-strength-fill','cu-strength-label')">
@@ -1043,10 +1042,10 @@
       <div class="card" style="overflow-x:auto">
         <table class="data-table" id="users-table">
           <thead><tr>
-            <th>Name</th><th>Role</th><th>Email</th><th>Department</th><th>Employee ID</th><th>Created</th>
+            <th>Name</th><th>Role</th><th>Username</th><th>Email</th><th>Department</th><th>Qualification</th><th>Created</th>
           </tr></thead>
           <tbody id="users-tbody">
-            <tr><td colspan="6" style="text-align:center;color:var(--text-2);padding:32px">Loading users…</td></tr>
+            <tr><td colspan="7" style="text-align:center;color:var(--text-2);padding:32px">Loading users…</td></tr>
           </tbody>
         </table>
       </div>
@@ -1058,7 +1057,7 @@
       <div class="auth-wrap">
         <div class="auth-card">
           <div class="auth-title">Forgot Password 🔒</div>
-          <div class="auth-sub">Enter your registered email to receive reset instructions</div>
+          <div class="auth-sub">Enter your registered email address to receive reset instructions</div>
           <div class="auth-error" id="forgot-error"></div>
           <div class="auth-success" id="forgot-success"></div>
           <div class="form-group" style="margin-bottom:20px">
@@ -1514,8 +1513,8 @@ function renderStaffPage(){
 
   const dEl=document.getElementById('staff-grid-doctors');
   const nEl=document.getElementById('staff-grid-nurses');
-  if(dEl) dEl.innerHTML=doctors.length?doctors.map(card).join(''):'<div class="staff-empty">No doctors added yet. Click <b>+ Add Doctor</b> above.</div>';
-  if(nEl) nEl.innerHTML=nurses.length?nurses.map(card).join(''):'<div class="staff-empty">No nurses added yet. Click <b>+ Add Nurse</b> above.</div>';
+  if(dEl) dEl.innerHTML=doctors.length?doctors.map(card).join(''):'<div class="staff-empty">No doctors added yet. Add a user with the Doctor role to see them here.</div>';
+  if(nEl) nEl.innerHTML=nurses.length?nurses.map(card).join(''):'<div class="staff-empty">No nurses or staff added yet. Add users with Nurse or Staff roles to see them here.</div>';
 }
 
 window.openAddStaff=function(role){
@@ -1904,7 +1903,7 @@ window.openCreateUser=function(){
 };
 window.closeCreateUser=function(){
   document.getElementById('create-user-card').style.display='none';
-  ['cu-name','cu-email','cu-mobile','cu-empid','cu-pw','cu-admin-pw'].forEach(id=>{
+  ['cu-name','cu-username','cu-email','cu-mobile','cu-qual','cu-pw','cu-admin-pw'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
 };
@@ -1912,22 +1911,33 @@ window.submitCreateUser=async function(){
   const errEl=document.getElementById('cu-error');
   errEl.style.display='none';
   const name=document.getElementById('cu-name').value.trim();
+  const username=document.getElementById('cu-username').value.trim().toLowerCase().replace(/\s+/g,'');
   const email=document.getElementById('cu-email').value.trim();
   const role=document.getElementById('cu-role').value;
   const mobile=document.getElementById('cu-mobile').value.trim();
   const dept=document.getElementById('cu-dept').value;
-  const empId=document.getElementById('cu-empid').value.trim();
+  const qual=document.getElementById('cu-qual').value.trim();
   const pw=document.getElementById('cu-pw').value;
   const adminPw=document.getElementById('cu-admin-pw').value;
-  if(!name||!email||!pw||!adminPw){ errEl.textContent='Name, email, password and your admin password are required.'; errEl.style.display='block'; return; }
+  if(!name||!username||!pw||!adminPw){ errEl.textContent='Name, username, password and your admin password are required.'; errEl.style.display='block'; return; }
   if(pw.length<8){ errEl.textContent='Password must be at least 8 characters.'; errEl.style.display='block'; return; }
   if(!window._currentUser){ errEl.textContent='You are not logged in.'; errEl.style.display='block'; return; }
   try{
-    await api('POST','/api/accounts',{
-      id:'u'+Date.now(), name, role, email, mobile, dept, empId,
-      pw, adminEmail:window._currentUser.email, adminPw,
+    const newUser = await api('POST','/api/accounts',{
+      id:'u'+Date.now(), name, role, username, email, mobile, dept, qual,
+      pw, adminEmail:window._currentUser.username||window._currentUser.email, adminPw,
       createdAt:new Date().toISOString()
     });
+    // Auto-sync to staff list
+    if(role==='doctor'||role==='nurse'||role==='staff'||role==='pharmacist'){
+      const staffData={id:'stf'+Date.now(),name,role:role==='pharmacist'?'staff':role,dept,qual,contact:mobile};
+      try{
+        await api('POST','/api/staff',staffData);
+        const idx=window._staff.findIndex(s=>s.id===staffData.id);
+        if(idx>-1) window._staff[idx]=staffData; else window._staff.push(staffData);
+        renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
+      }catch(se){ console.warn('Staff sync failed:',se.message); }
+    }
     closeCreateUser();
     loadUsers();
     alert('User "'+name+'" created successfully.');
@@ -1937,23 +1947,24 @@ async function loadUsers(){
   if(!window._currentUser||window._currentUser.role!=='admin') return;
   const tbody=document.getElementById('users-tbody');
   if(!tbody) return;
-  tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-2)">Loading…</td></tr>';
+  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">Loading…</td></tr>';
   try{
-    const adminEmail=encodeURIComponent(window._currentUser.email);
+    const adminEmail=encodeURIComponent(window._currentUser.username||window._currentUser.email||'');
     const adminPw=encodeURIComponent(window._currentUser._adminPw||'');
     const res=await fetch('/api/accounts?adminEmail='+adminEmail+'&adminPw='+adminPw);
     const json=await res.json();
     if(!json.ok) throw new Error(json.error);
-    if(!json.data.length){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-2)">No users yet.</td></tr>'; return; }
+    if(!json.data.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">No users yet.</td></tr>'; return; }
     tbody.innerHTML=json.data.map(u=>`<tr>
       <td><b>${u.name||'—'}</b></td>
       <td><span class="badge">${u.role||'—'}</span></td>
-      <td>${u.email||'—'}</td>
+      <td style="font-family:monospace;font-size:13px">${u.username||'—'}</td>
+      <td style="font-size:12px;color:var(--text-2)">${u.email||'—'}</td>
       <td>${u.dept||'—'}</td>
-      <td style="font-size:12px;color:var(--text-2)">${u.emp_id||'—'}</td>
+      <td style="font-size:12px;color:var(--text-2)">${u.qual||'—'}</td>
       <td style="font-size:12px;color:var(--text-2)">${u.created_at?new Date(u.created_at).toLocaleDateString():'—'}</td>
     </tr>`).join('');
-  }catch(e){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:#dc2626">'+e.message+'</td></tr>'; }
+  }catch(e){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:#dc2626">'+e.message+'</td></tr>'; }
 }
 
 // Enter key triggers login
@@ -1966,7 +1977,7 @@ window.doLogin=async function(){
   const email=document.getElementById('login-email').value.trim();
   const pw=document.getElementById('login-pw').value;
   showAuthMsg('login-error','login-success','','');
-  if(!email||!pw){ showAuthMsg('login-error','login-success','Please enter email and password.',true); return; }
+  if(!email||!pw){ showAuthMsg('login-error','login-success','Please enter username and password.',true); return; }
   try{
     const user=await api('POST','/api/accounts/login',{email,pw});
     window._currentUser={...user}; saveStoredUser(window._currentUser);
