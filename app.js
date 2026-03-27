@@ -813,8 +813,18 @@ function resetLoginForm(){
   if(pwEl) pwEl.value='';
   showAuthMsg('login-error','login-success','','');
 }
-window.logoutUser=function(){
-  window._currentUser=null; clearStoredUser(); updateAuthUI();
+window.logoutUser=async function(){
+  const u=window._currentUser||{};
+  try{
+    await fetch('/api/accounts/logout',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ username:u.username||u.email||'', role:u.role||'' })
+    });
+  }catch(_){ /* non-blocking — always log out locally */ }
+  window._currentUser=null;
+  clearStoredUser();
+  updateAuthUI();
   resetLoginForm();
   showPage('login');
 };
