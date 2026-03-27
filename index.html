@@ -1928,13 +1928,20 @@ window.signupStep2Next=async function(){
   if(pw!==pw2){ err.textContent='Passwords do not match.'; err.style.display='block'; return; }
   const newUser={id:'u'+Date.now(),name:document.getElementById('su-name').value.trim(),role:document.getElementById('su-role').value,email:document.getElementById('su-email').value.trim(),mobile:document.getElementById('su-mobile').value.trim(),dept:document.getElementById('su-dept').value,empId:document.getElementById('su-empid').value.trim(),pw,createdAt:new Date().toISOString()};
   try{
-    await api('POST','/api/accounts',newUser);
-    window._currentUser={...newUser}; saveStoredUser(window._currentUser);
+    const created=await api('POST','/api/accounts',newUser);
+    // Store user without pw (server returns safeUser with pw stripped)
+    window._currentUser={...created}; saveStoredUser(window._currentUser);
     updateAuthUI();
     document.getElementById('su-done-name').textContent=newUser.name.split(' ')[0]||'there';
     signupGoStep(3);
   }catch(e){ err.textContent=e.message; err.style.display='block'; }
 };
+
+// Enter key triggers login
+document.addEventListener('keydown', function(e){
+  const loginPage = document.getElementById('page-login');
+  if (e.key === 'Enter' && loginPage && loginPage.classList.contains('active')) { window.doLogin(); }
+});
 
 window.doLogin=async function(){
   const email=document.getElementById('login-email').value.trim();
@@ -1960,7 +1967,7 @@ window.doChangePassword=async function(){
   if(newPw!==confirm){ showAuthMsg('chpw-error','chpw-success','Passwords do not match.',true); return; }
   try{
     await api('PUT','/api/accounts/'+window._currentUser.id+'/password',{oldPw,newPw});
-    window._currentUser.pw=newPw; saveStoredUser(window._currentUser);
+    // No pw stored in session (password is hashed server-side)
     showAuthMsg('chpw-error','chpw-success','✓ Password updated successfully!',false);
     ['chpw-old','chpw-new','chpw-confirm'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});
   }catch(e){ showAuthMsg('chpw-error','chpw-success',e.message,true); }
