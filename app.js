@@ -879,6 +879,104 @@ window.logoutUser=async function(){
   resetLoginForm();
   showPage('login');
 };
+// ── CONFIRM DELETE MODAL ─────────────────────────────────────────────
+let _confirmCb=null, _confirmKeyword=null;
+window.confirmDelete=function({title,record,message,icon,btnLabel,requireType,onConfirm}){
+  _confirmCb=onConfirm; _confirmKeyword=requireType||null;
+  document.getElementById('confirm-icon').textContent    = icon||'🗑️';
+  document.getElementById('confirm-title').textContent   = title||'Are you sure?';
+  document.getElementById('confirm-record').textContent  = record||'';
+  document.getElementById('confirm-message').textContent = message||'This action cannot be undone.';
+  document.getElementById('confirm-btn-label').textContent = btnLabel||'Delete';
+  const typeWrap=document.getElementById('confirm-type-wrap');
+  const typeInput=document.getElementById('confirm-type-input');
+  const btn=document.getElementById('confirm-action-btn');
+  if(requireType){
+    typeWrap.style.display='block'; typeInput.value='';
+    document.getElementById('confirm-keyword').textContent=requireType;
+    btn.disabled=true; btn.style.opacity='.4'; btn.style.cursor='not-allowed';
+  } else {
+    typeWrap.style.display='none';
+    btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer';
+  }
+  const modal=document.getElementById('confirm-modal');
+  modal.style.display='flex';
+  setTimeout(()=>{ if(requireType) typeInput.focus(); },100);
+};
+window.checkConfirmKeyword=function(){
+  const input=document.getElementById('confirm-type-input');
+  const btn=document.getElementById('confirm-action-btn');
+  const ok=input.value===_confirmKeyword;
+  btn.disabled=!ok; btn.style.opacity=ok?'1':'.4'; btn.style.cursor=ok?'pointer':'not-allowed';
+  input.style.borderColor=input.value.length>0?(ok?'#22c55e':'#ef4444'):'';
+};
+window.closeConfirmModal=function(){
+  document.getElementById('confirm-modal').style.display='none';
+  _confirmCb=null; _confirmKeyword=null;
+};
+window.executeConfirm=async function(){
+  if(!_confirmCb) return;
+  const btn=document.getElementById('confirm-action-btn');
+  const lbl=document.getElementById('confirm-btn-label');
+  btn.disabled=true; const orig=lbl.textContent; lbl.textContent='Working…';
+  try{ await _confirmCb(); closeConfirmModal(); }
+  catch(e){ lbl.textContent=orig; btn.disabled=false; alert('Failed: '+e.message); }
+};
+document.addEventListener('keydown',e=>{
+  const m=document.getElementById('confirm-modal');
+  if(!m||m.style.display==='none') return;
+  if(e.key==='Escape') closeConfirmModal();
+  if(e.key==='Enter'&&!document.getElementById('confirm-action-btn').disabled) executeConfirm();
+});
+
+// Replace dischargePatient:
+window.dischargePatient=function(id){
+  const p=getPatient(id); if(!p) return;
+  const u=window._currentUser||{};
+  confirmDelete({
+    icon:'🏥', title:'Discharge patient?', record:p.name,
+    message:'Patient will be marked as discharged. All records are preserved.',
+    btnLabel:'Discharge',
+    onConfirm:async()=>{
+      const result=await api('POST','/api/patients/'+id+'/discharge',{_actor:u.email||'unknown',_actorRole:u.role||''});
+      const updated={...p,status:'discharged',dischargeDate:result.dischargeDate};
+      const idx=window._patients.findIndex(x=>x.id===id);
+      if(idx>-1) window._patients[idx]=updated;
+      renderPatients(window._patientFilter);
+    }
+  });
+};
+
+// Replace removeStaff:
+window.removeStaff=function(id,name){
+  const u=window._currentUser||{};
+  confirmDelete({
+    record:name, message:'This staff member will be permanently removed.',
+    requireType:'DELETE',
+    onConfirm:async()=>{
+      await api('DELETE','/api/staff/'+id+'?actor='+encodeURIComponent(u.email||'unknown')+'&actorRole='+encodeURIComponent(u.role||''));
+      window._staff=window._staff.filter(s=>s.id!==id);
+      renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
+    }
+  });
+};
+
+// Replace deleteAppt:
+window.deleteAppt=function(id){
+  const a=window._appointments.find(x=>x.id===id);
+  const u=window._currentUser||{};
+  confirmDelete({
+    icon:'📅', title:'Cancel appointment?',
+    record:a?`${a.patientName} — ${a.date}`:id,
+    message:'This appointment will be permanently removed.',
+    btnLabel:'Cancel Appointment',
+    onConfirm:async()=>{
+      await api('DELETE','/api/appointments/'+id+'?actor='+encodeURIComponent(u.email||'unknown')+'&actorRole='+encodeURIComponent(u.role||''));
+      window._appointments=window._appointments.filter(x=>x.id!==id);
+      renderAppointments();
+    }
+  });
+};
 
 // ── BOOT ───────────────────────────────────────────────────────────
 // Banner already hidden in HTML (Railway PostgreSQL)
