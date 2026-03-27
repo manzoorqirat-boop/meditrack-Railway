@@ -651,11 +651,8 @@
 <body>
 <div class="app">
 
-  <!-- SETUP BANNER -->
-  <div id="setup-banner">
-    <span>⚙️ <b>Firebase not connected.</b> Data resets on refresh until you connect. <a onclick="openSetup()">Tap to set up →</a></span>
-    <button class="setup-btn" onclick="openSetup()">Connect Firebase</button>
-  </div>
+  <!-- SETUP BANNER removed - using Railway PostgreSQL -->
+  <div id="setup-banner" style="display:none"></div>
 
   <!-- TOPBAR -->
   <div class="topbar">
@@ -1226,33 +1223,7 @@
   </div>
 </div>
 
-<!-- ═══ FIREBASE SETUP MODAL ═══ -->
-<div id="setup-modal">
-  <div class="setup-box">
-    <h2>🔥 Connect Firebase (Free Cloud Database)</h2>
-    <p>Follow these steps to permanently save data to the cloud — every device sees the same data in real time.</p>
-    <div class="step-block">
-      <div class="step-num">Step 1</div><div class="step-title">Create a Firebase Project</div>
-      <div class="step-body">Go to <b>console.firebase.google.com</b> → Sign in → <b>Create a project</b> → Name it <b>meditrack-hospital</b> → Turn OFF Analytics → <b>Create project</b>.</div>
-    </div>
-    <div class="step-block">
-      <div class="step-num">Step 2</div><div class="step-title">Create Firestore Database</div>
-      <div class="step-body">Tap <b>Build → Firestore Database → Create database → Start in test mode</b> → Region <code>asia-south1</code> → <b>Enable</b>.</div>
-    </div>
-    <div class="step-block">
-      <div class="step-num">Step 3</div><div class="step-title">Register Web App &amp; Get Config</div>
-      <div class="step-body">Project home → tap <b>&lt;/&gt;</b> Web icon → Nickname: <b>meditrack-web</b> → <b>Register app</b> → Copy the <code>const firebaseConfig = { … }</code> block.</div>
-    </div>
-    <div class="step-block" style="border-color:#0F6E56">
-      <div class="step-num">Step 4 — Paste config here</div><div class="step-title">Your Firebase Config</div>
-      <div class="step-body" style="margin-bottom:10px">Paste the <code>{ ... }</code> block you copied:</div>
-      <textarea class="config-area" id="fb-config-input" placeholder='{ "apiKey": "AIzaSy...", "authDomain": "...", "projectId": "...", "storageBucket": "...", "messagingSenderId": "...", "appId": "..." }'></textarea>
-      <button class="save-config-btn" onclick="applyFirebaseConfig()">✓ Connect &amp; Save</button>
-      <div class="config-status" id="config-status"></div>
-    </div>
-    <div style="text-align:center;margin-top:8px"><button class="btn" onclick="closeSetup()">Close</button></div>
-  </div>
-</div>
+<!-- Firebase setup modal removed - using Railway PostgreSQL -->
 
 <script type="module">
 
@@ -1789,7 +1760,7 @@ window.printReport=function(){
 // ── MODALS ─────────────────────────────────────────────────────────
 window.closeModal=function(id){ document.getElementById(id).classList.remove('open'); };
 document.querySelectorAll('.modal-backdrop').forEach(b=>{ b.addEventListener('click',e=>{ if(e.target===b) b.classList.remove('open'); }); });
-window.openSetup=function(){ document.getElementById('setup-modal').classList.add('open'); };
+window.openSetup=function(){}; // Firebase removed - using Railway PostgreSQL
 window.closeSetup=function(){ document.getElementById('setup-modal').classList.remove('open'); };
 
 // ── APPOINTMENTS ──────────────────────────────────────────────────
@@ -2000,8 +1971,7 @@ window.logoutUser=function(){
 };
 
 // ── BOOT ───────────────────────────────────────────────────────────
-// Hide Firebase banner - using PostgreSQL now
-document.getElementById('setup-banner').style.display='none';
+// Banner already hidden in HTML (Railway PostgreSQL)
 
 // Restore logged-in user session
 window._currentUser=loadStoredUser();
