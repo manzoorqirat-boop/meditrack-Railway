@@ -1255,21 +1255,12 @@
 </div>
 
 <script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy }
-  from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 // ── STATE ──────────────────────────────────────────────────────────
-window._db        = null;
 window._patients  = [];
 window._vitalsLog = [];
 window._staff     = [];
-window._wards     = [
-  {id:'w1',name:'General Ward A',beds:12,type:'General'},
-  {id:'w2',name:'ICU',beds:4,type:'ICU'},
-  {id:'w3',name:'Pediatric Ward',beds:6,type:'Pediatric'},
-];
-window._unsubs           = [];
+window._wards     = [];
 window._editingPatientId = null;
 window._editingStaffId   = null;
 window._patientFilter    = 'all';
@@ -1319,52 +1310,51 @@ window.showPage=function(id){
 window.openDrawer=function(){ document.getElementById('drawer').classList.add('open'); document.getElementById('drawer-overlay').classList.add('open'); document.body.style.overflow='hidden'; };
 window.closeDrawer=function(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('drawer-overlay').classList.remove('open'); document.body.style.overflow=''; };
 
-// ── FIREBASE ───────────────────────────────────────────────────────
-function loadStoredConfig(){ try{ const r=localStorage.getItem('meditrack_fb_config'); return r?JSON.parse(r):null; }catch{ return null; } }
-
-window.applyFirebaseConfig=async function(){
-  const statusEl=document.getElementById('config-status');
-  statusEl.textContent=''; statusEl.className='config-status';
-  let raw=document.getElementById('fb-config-input').value.trim();
-  raw=raw.replace(/^const\s+firebaseConfig\s*=\s*/,'').replace(/;$/,'').trim();
+// ── REST API ───────────────────────────────────────────────────────
+async function api(method, path, body){
+  setSyncStatus('saving','Saving…');
   try{
-    const config=Function('"use strict";return('+raw+')')();
-    if(!config.apiKey||!config.projectId) throw new Error('Missing apiKey or projectId');
-    localStorage.setItem('meditrack_fb_config',JSON.stringify(config));
-    statusEl.textContent='✓ Saved! Connecting…'; statusEl.className='config-status ok';
-    await connectFirebase(config); closeSetup();
-    document.getElementById('setup-banner').style.display='none';
-  }catch(e){ statusEl.textContent='✗ '+e.message+' — check the { } block.'; statusEl.className='config-status err'; }
-};
-
-async function connectFirebase(config){
-  try{
-    window._unsubs.forEach(u=>u()); window._unsubs=[];
-    const app=initializeApp(config,'meditrack-'+Date.now());
-    window._db=getFirestore(app);
-    setSyncStatus('saving','Connecting…'); showLoading('Connecting to Firebase…');
-    await setupListeners();
-    setSyncStatus('live','Live · Cloud sync on'); hideLoading();
-  }catch(e){ setSyncStatus('offline','Connection failed'); hideLoading(); alert('Firebase connection failed:\n'+e.message); }
+    const res = await fetch(path,{
+      method, headers:{'Content-Type':'application/json'},
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const json = await res.json();
+    if(!json.ok) throw new Error(json.error||'Request failed');
+    setSyncStatus('live','Live · PostgreSQL');
+    return json.data;
+  } catch(e){
+    setSyncStatus('offline','Error: '+e.message);
+    throw e;
+  }
 }
 
-async function setupListeners(){
-  const db=window._db;
-  const u1=onSnapshot(collection(db,'patients'),snap=>{ window._patients=snap.docs.map(d=>({id:d.id,...d.data()})); refreshCurrentPage(); },err=>{ setSyncStatus('offline','Sync error'); console.error(err); });
-  const u2=onSnapshot(query(collection(db,'vitalsLog'),orderBy('time','desc')),snap=>{ window._vitalsLog=snap.docs.map(d=>({id:d.id,...d.data()})); refreshCurrentPage(); },err=>console.error(err));
-  const u3=onSnapshot(collection(db,'wards'),snap=>{
-    if(!snap.empty) window._wards=snap.docs.map(d=>({id:d.id,...d.data()}));
-    else window._wards.forEach(w=>setDoc(doc(db,'wards',w.id),{name:w.name,beds:w.beds,type:w.type}));
-    refreshCurrentPage();
-  },err=>console.error(err));
-  const u4=onSnapshot(collection(db,'staff'),snap=>{ window._staff=snap.docs.map(d=>({id:d.id,...d.data()})); refreshCurrentPage(); refreshDoctorSelect(); refreshNurseSelect(); },err=>console.error(err));
-  const u5=onSnapshot(query(collection(db,'appointments'),orderBy('date','desc')),snap=>{ window._appointments=snap.docs.map(d=>({id:d.id,...d.data()})); refreshCurrentPage(); },err=>console.error(err));
-  window._unsubs=[u1,u2,u3,u4,u5];
-  await new Promise(r=>setTimeout(r,1500));
+async function loadAll(){
+  setSyncStatus('saving','Loading…'); showLoading('Loading data…');
+  try{
+    const [patients,vitals,wards,staff,appts] = await Promise.all([
+      api('GET','/api/patients'),
+      api('GET','/api/vitals'),
+      api('GET','/api/wards'),
+      api('GET','/api/staff'),
+      api('GET','/api/appointments'),
+    ]);
+    window._patients     = patients.map(normalizePatient);
+    window._vitalsLog    = vitals.map(normalizeVital);
+    window._wards        = wards.map(normalizeWard);
+    window._staff        = staff.map(normalizeStaff);
+    window._appointments = appts.map(normalizeAppt);
+    setSyncStatus('live','Live · PostgreSQL');
+    hideLoading();
+    renderDashboard();
+  } catch(e){ setSyncStatus('offline','Load failed'); hideLoading(); }
 }
 
-async function dbSet(col,id,data){ if(!window._db) return; setSyncStatus('saving','Saving…'); try{ await setDoc(doc(window._db,col,id),data); setSyncStatus('live','Live · Cloud sync on'); }catch(e){ setSyncStatus('offline','Save failed'); alert('Save failed: '+e.message); } }
-async function dbDel(col,id){ if(!window._db) return; try{ await deleteDoc(doc(window._db,col,id)); }catch(e){ alert('Delete failed: '+e.message); } }
+// Normalize snake_case from DB → camelCase used in UI
+function normalizePatient(r){ return {id:r.id,name:r.name,age:r.age,gender:r.gender,blood:r.blood,contact:r.contact,wardId:r.ward_id,admitDate:r.admit_date,doctor:r.doctor,diagnosis:r.diagnosis,allergies:r.allergies,status:r.status,dischargeDate:r.discharge_date,updatedAt:r.updated_at}; }
+function normalizeVital(r){ return {id:r.id,patientId:r.patient_id,time:r.time,bp:r.bp,pulse:r.pulse,temp:r.temp,spo2:r.spo2,resp:r.resp,glucose:r.glucose,pain:r.pain,nurse:r.nurse,notes:r.notes,savedAt:r.saved_at}; }
+function normalizeWard(r){ return {id:r.id,name:r.name,beds:r.beds,type:r.type}; }
+function normalizeStaff(r){ return {id:r.id,name:r.name,role:r.role,dept:r.dept,qual:r.qual,contact:r.contact}; }
+function normalizeAppt(r){ return {id:r.id,patientName:r.patient_name,mobile:r.mobile,age:r.age,gender:r.gender,date:r.date,time:r.time,doctor:r.doctor,dept:r.dept,reason:r.reason,notes:r.notes,status:r.status,createdAt:r.created_at}; }
 
 function refreshCurrentPage(){
   const active=document.querySelector('.page.active'); if(!active) return;
@@ -1453,18 +1443,26 @@ window.savePatient=async function(){
   if(!name){ alert('Patient name is required.'); return; }
   const id=window._editingPatientId||('p'+Date.now());
   const existing=getPatient(id)||{};
-  const data={...existing,name,age:document.getElementById('p-age').value,gender:document.getElementById('p-gender').value,blood:document.getElementById('p-blood').value,contact:document.getElementById('p-contact').value,wardId:document.getElementById('p-ward').value,admitDate:document.getElementById('p-admit').value,doctor:document.getElementById('p-doctor').value,diagnosis:document.getElementById('p-diagnosis').value,allergies:document.getElementById('p-allergies').value,status:existing.status||'admitted',updatedAt:new Date().toISOString()};
-  if(!window._db){ const idx=window._patients.findIndex(p=>p.id===id); if(idx>-1) window._patients[idx]={id,...data}; else window._patients.push({id,...data}); closeModal('modal-patient'); renderPatients(window._patientFilter); return; }
+  const data={...existing,id,name,age:document.getElementById('p-age').value,gender:document.getElementById('p-gender').value,blood:document.getElementById('p-blood').value,contact:document.getElementById('p-contact').value,wardId:document.getElementById('p-ward').value,admitDate:document.getElementById('p-admit').value,doctor:document.getElementById('p-doctor').value,diagnosis:document.getElementById('p-diagnosis').value,allergies:document.getElementById('p-allergies').value,status:existing.status||'admitted',updatedAt:new Date().toISOString()};
   closeModal('modal-patient');
-  await dbSet('patients',id,data);
+  try{
+    await api('POST','/api/patients',data);
+    const idx=window._patients.findIndex(p=>p.id===id);
+    if(idx>-1) window._patients[idx]=data; else window._patients.push(data);
+    renderPatients(window._patientFilter);
+  }catch(e){ alert('Save failed: '+e.message); }
 };
 
 window.dischargePatient=async function(id){
   const p=getPatient(id); if(!p) return;
   if(!confirm('Mark '+p.name+' as discharged?')) return;
   const updated={...p,status:'discharged',dischargeDate:new Date().toISOString()};
-  if(!window._db){ const idx=window._patients.findIndex(x=>x.id===id); if(idx>-1) window._patients[idx]=updated; renderPatients(window._patientFilter); return; }
-  await dbSet('patients',id,updated);
+  try{
+    await api('POST','/api/patients',updated);
+    const idx=window._patients.findIndex(x=>x.id===id);
+    if(idx>-1) window._patients[idx]=updated;
+    renderPatients(window._patientFilter);
+  }catch(e){ alert('Failed: '+e.message); }
 };
 
 // ── VITALS ─────────────────────────────────────────────────────────
@@ -1489,11 +1487,13 @@ window.saveVitals=async function(){
   const pid=document.getElementById('vitals-patient-select').value;
   if(!pid){ alert('Please select a patient.'); return; }
   const id='l'+Date.now();
-  const log={patientId:pid,time:document.getElementById('vitals-time').value,bp:document.getElementById('v-bp').value,pulse:document.getElementById('v-pulse').value,temp:document.getElementById('v-temp').value,spo2:document.getElementById('v-spo2').value,resp:document.getElementById('v-resp').value,glucose:document.getElementById('v-glucose').value,pain:document.getElementById('v-pain').value,nurse:document.getElementById('v-nurse').value,notes:document.getElementById('v-notes').value,savedAt:new Date().toISOString()};
-  if(!window._db){ window._vitalsLog.unshift({id,...log}); alert('Vitals saved locally (Firebase not connected).'); clearVitalsForm(); return; }
-  await dbSet('vitalsLog',id,log);
-  alert('Vitals saved for '+getPatient(pid).name+'!');
-  clearVitalsForm();
+  const log={id,patientId:pid,time:document.getElementById('vitals-time').value,bp:document.getElementById('v-bp').value,pulse:document.getElementById('v-pulse').value,temp:document.getElementById('v-temp').value,spo2:document.getElementById('v-spo2').value,resp:document.getElementById('v-resp').value,glucose:document.getElementById('v-glucose').value,pain:document.getElementById('v-pain').value,nurse:document.getElementById('v-nurse').value,notes:document.getElementById('v-notes').value,savedAt:new Date().toISOString()};
+  try{
+    await api('POST','/api/vitals',log);
+    window._vitalsLog.unshift(log);
+    alert('Vitals saved for '+getPatient(pid).name+'!');
+    clearVitalsForm();
+  }catch(e){ alert('Save failed: '+e.message); }
 };
 
 window.clearVitalsForm=function(){
@@ -1518,11 +1518,14 @@ window.saveWard=async function(){
   const name=document.getElementById('w-name').value.trim();
   if(!name){ alert('Ward name required.'); return; }
   const id='w'+Date.now();
-  const ward={name,beds:parseInt(document.getElementById('w-beds').value)||10,type:document.getElementById('w-type').value};
-  if(!window._db){ window._wards.push({id,...ward}); closeModal('modal-ward'); renderWards(); return; }
+  const ward={id,name,beds:parseInt(document.getElementById('w-beds').value)||10,type:document.getElementById('w-type').value};
   closeModal('modal-ward');
-  await dbSet('wards',id,ward);
-  ['w-name','w-beds'].forEach(i=>document.getElementById(i).value='');
+  try{
+    await api('POST','/api/wards',ward);
+    window._wards.push(ward);
+    ['w-name','w-beds'].forEach(i=>document.getElementById(i).value='');
+    renderWards();
+  }catch(e){ alert('Save failed: '+e.message); }
 };
 
 // ── STAFF ──────────────────────────────────────────────────────────
@@ -1577,22 +1580,23 @@ window.saveStaff=async function(){
   const name=document.getElementById('st-name').value.trim();
   if(!name){ alert('Name is required.'); return; }
   const id=window._editingStaffId||('stf'+Date.now());
-  const data={name,role:document.getElementById('st-role').value,dept:document.getElementById('st-dept').value.trim(),qual:document.getElementById('st-qual').value.trim(),contact:document.getElementById('st-contact').value.trim()};
-  if(!window._db){
-    const idx=window._staff.findIndex(s=>s.id===id);
-    if(idx>-1) window._staff[idx]={id,...data}; else window._staff.push({id,...data});
-    closeModal('modal-staff'); renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect(); return;
-  }
+  const data={id,name,role:document.getElementById('st-role').value,dept:document.getElementById('st-dept').value.trim(),qual:document.getElementById('st-qual').value.trim(),contact:document.getElementById('st-contact').value.trim()};
   closeModal('modal-staff');
-  await dbSet('staff',id,data);
-  renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
+  try{
+    await api('POST','/api/staff',data);
+    const idx=window._staff.findIndex(s=>s.id===id);
+    if(idx>-1) window._staff[idx]=data; else window._staff.push(data);
+    renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
+  }catch(e){ alert('Save failed: '+e.message); }
 };
 
 window.removeStaff=async function(id,name){
   if(!confirm('Remove '+name+' from staff list?')) return;
-  if(!window._db){ window._staff=window._staff.filter(s=>s.id!==id); renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect(); return; }
-  await dbDel('staff',id);
-  renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
+  try{
+    await api('DELETE','/api/staff/'+id);
+    window._staff=window._staff.filter(s=>s.id!==id);
+    renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
+  }catch(e){ alert('Failed: '+e.message); }
 };
 
 // ── HISTORY / REPORT ───────────────────────────────────────────────
@@ -1843,23 +1847,30 @@ window.saveAppointment=async function(){
   const date=document.getElementById('appt-date').value;
   if(!name||!mobile||!date){ alert('Patient name, mobile, and date are required.'); return; }
   const id='apt'+Date.now();
-  const appt={patientName:name,mobile,age:document.getElementById('appt-age').value,gender:document.getElementById('appt-gender').value,date,time:document.getElementById('appt-appttime').value,doctor:document.getElementById('appt-doctor').value,dept:document.getElementById('appt-dept').value,reason:document.getElementById('appt-reason').value.trim(),notes:document.getElementById('appt-notes').value.trim(),status:'scheduled',createdAt:new Date().toISOString()};
-  if(!window._db){ window._appointments.unshift({id,...appt}); const m=document.getElementById('appt-form-msg'); if(m){m.textContent='✓ Appointment booked for '+name+'!';m.style.display='block';setTimeout(()=>{m.style.display='none';showPage('appointments');},1500);} return; }
-  await dbSet('appointments',id,appt);
-  showPage('appointments');
+  const appt={id,patientName:name,mobile,age:document.getElementById('appt-age').value,gender:document.getElementById('appt-gender').value,date,time:document.getElementById('appt-appttime').value,doctor:document.getElementById('appt-doctor').value,dept:document.getElementById('appt-dept').value,reason:document.getElementById('appt-reason').value.trim(),notes:document.getElementById('appt-notes').value.trim(),status:'scheduled',createdAt:new Date().toISOString()};
+  try{
+    await api('POST','/api/appointments',appt);
+    window._appointments.unshift(appt);
+    const m=document.getElementById('appt-form-msg');
+    if(m){m.textContent='✓ Appointment booked for '+name+'!';m.style.display='block';setTimeout(()=>{m.style.display='none';showPage('appointments');},1500);}
+  }catch(e){ alert('Save failed: '+e.message); }
 };
 
 window.markApptDone=async function(id){
   const idx=window._appointments.findIndex(a=>a.id===id); if(idx<0) return;
   const updated={...window._appointments[idx],status:'completed'};
-  if(!window._db){ window._appointments[idx]=updated; renderAppointments(); return; }
-  await dbSet('appointments',id,updated);
+  try{
+    await api('POST','/api/appointments',updated);
+    window._appointments[idx]=updated; renderAppointments();
+  }catch(e){ alert('Failed: '+e.message); }
 };
 
 window.deleteAppt=async function(id){
   if(!confirm('Remove this appointment?')) return;
-  if(!window._db){ window._appointments=window._appointments.filter(a=>a.id!==id); renderAppointments(); return; }
-  await dbDel('appointments',id);
+  try{
+    await api('DELETE','/api/appointments/'+id);
+    window._appointments=window._appointments.filter(a=>a.id!==id); renderAppointments();
+  }catch(e){ alert('Failed: '+e.message); }
 };
 
 // ── ACCOUNT / AUTH ─────────────────────────────────────────────────
@@ -1887,8 +1898,6 @@ function loadStoredUser(){
 }
 function saveStoredUser(u){ try{ localStorage.setItem('meditrack_user',JSON.stringify(u)); }catch(e){} }
 function clearStoredUser(){ try{ localStorage.removeItem('meditrack_user'); }catch(e){} }
-function loadUsers(){ try{ return JSON.parse(localStorage.getItem('meditrack_accounts')||'[]'); }catch(e){ return []; } }
-function saveUsers(users){ try{ localStorage.setItem('meditrack_accounts',JSON.stringify(users)); }catch(e){} }
 
 function showAuthMsg(errId,sucId,msg,isErr){
   const eEl=document.getElementById(errId), sEl=document.getElementById(sucId);
@@ -1939,73 +1948,51 @@ window.signupStep1Next=function(){
   signupGoStep(2);
 };
 
-window.signupStep2Next=function(){
+window.signupStep2Next=async function(){
   const pw=document.getElementById('su-pw').value;
   const pw2=document.getElementById('su-pw2').value;
   const err=document.getElementById('signup-error');
   err.style.display='none';
   if(pw.length<8){ err.textContent='Password must be at least 8 characters.'; err.style.display='block'; return; }
   if(pw!==pw2){ err.textContent='Passwords do not match.'; err.style.display='block'; return; }
-  const email=document.getElementById('su-email').value.trim();
-  const users=loadUsers();
-  if(users.find(u=>u.email===email)){ err.textContent='An account with this email already exists.'; err.style.display='block'; return; }
-  const newUser={id:'u'+Date.now(),name:document.getElementById('su-name').value.trim(),role:document.getElementById('su-role').value,email,mobile:document.getElementById('su-mobile').value.trim(),dept:document.getElementById('su-dept').value,empId:document.getElementById('su-empid').value.trim(),pw,createdAt:new Date().toISOString()};
-  users.push(newUser); saveUsers(users);
-  window._currentUser={...newUser}; saveStoredUser(window._currentUser);
-  updateAuthUI();
-  document.getElementById('su-done-name').textContent=newUser.name.split(' ')[0]||'there';
-  signupGoStep(3);
+  const newUser={id:'u'+Date.now(),name:document.getElementById('su-name').value.trim(),role:document.getElementById('su-role').value,email:document.getElementById('su-email').value.trim(),mobile:document.getElementById('su-mobile').value.trim(),dept:document.getElementById('su-dept').value,empId:document.getElementById('su-empid').value.trim(),pw,createdAt:new Date().toISOString()};
+  try{
+    await api('POST','/api/accounts',newUser);
+    window._currentUser={...newUser}; saveStoredUser(window._currentUser);
+    updateAuthUI();
+    document.getElementById('su-done-name').textContent=newUser.name.split(' ')[0]||'there';
+    signupGoStep(3);
+  }catch(e){ err.textContent=e.message; err.style.display='block'; }
 };
 
-window.doLogin=function(){
+window.doLogin=async function(){
   const email=document.getElementById('login-email').value.trim();
   const pw=document.getElementById('login-pw').value;
   showAuthMsg('login-error','login-success','','');
   if(!email||!pw){ showAuthMsg('login-error','login-success','Please enter email and password.',true); return; }
-  const users=loadUsers();
-  const user=users.find(u=>u.email===email&&u.pw===pw);
-  if(!user){ showAuthMsg('login-error','login-success','Incorrect email or password.',true); return; }
-  window._currentUser={...user}; saveStoredUser(window._currentUser);
-  updateAuthUI();
-  showAuthMsg('login-error','login-success','✓ Welcome back, '+user.name.split(' ')[0]+'!',false);
-  setTimeout(()=>showPage('dashboard'),900);
+  try{
+    const user=await api('POST','/api/accounts/login',{email,pw});
+    window._currentUser={...user}; saveStoredUser(window._currentUser);
+    updateAuthUI();
+    showAuthMsg('login-error','login-success','✓ Welcome back, '+user.name.split(' ')[0]+'!',false);
+    setTimeout(()=>showPage('dashboard'),900);
+  }catch(e){ showAuthMsg('login-error','login-success',e.message,true); }
 };
 
-window.doForgotPassword=function(){
-  const email=document.getElementById('forgot-email').value.trim();
-  showAuthMsg('forgot-error','forgot-success','','');
-  if(!email){ showAuthMsg('forgot-error','forgot-success','Please enter your email address.',true); return; }
-  const users=loadUsers();
-  const user=users.find(u=>u.email===email);
-  if(!user){ showAuthMsg('forgot-error','forgot-success','No account found with this email.',true); return; }
-  // Simulate sending reset link
-  showAuthMsg('forgot-error','forgot-success','✓ Password reset link sent to '+email+'. (Demo: your password is stored locally — use Change Password after logging in.)',false);
-};
-
-function renderChangePassword(){
-  const loggedIn=!!window._currentUser;
-  document.getElementById('chpw-loggedin-section').style.display=loggedIn?'block':'none';
-  document.getElementById('chpw-loggedout-section').style.display=loggedIn?'none':'block';
-  ['chpw-old','chpw-new','chpw-confirm'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});
-  const e=document.getElementById('chpw-error'),s=document.getElementById('chpw-success');
-  if(e) e.style.display='none'; if(s) s.style.display='none';
-}
-
-window.doChangePassword=function(){
+window.doChangePassword=async function(){
   showAuthMsg('chpw-error','chpw-success','','');
   if(!window._currentUser){ showPage('login'); return; }
   const oldPw=document.getElementById('chpw-old').value;
   const newPw=document.getElementById('chpw-new').value;
   const confirm=document.getElementById('chpw-confirm').value;
-  if(oldPw!==window._currentUser.pw){ showAuthMsg('chpw-error','chpw-success','Current password is incorrect.',true); return; }
   if(newPw.length<8){ showAuthMsg('chpw-error','chpw-success','New password must be at least 8 characters.',true); return; }
   if(newPw!==confirm){ showAuthMsg('chpw-error','chpw-success','Passwords do not match.',true); return; }
-  const users=loadUsers();
-  const idx=users.findIndex(u=>u.id===window._currentUser.id);
-  if(idx>-1){ users[idx].pw=newPw; saveUsers(users); }
-  window._currentUser.pw=newPw; saveStoredUser(window._currentUser);
-  showAuthMsg('chpw-error','chpw-success','✓ Password updated successfully!',false);
-  ['chpw-old','chpw-new','chpw-confirm'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});
+  try{
+    await api('PUT','/api/accounts/'+window._currentUser.id+'/password',{oldPw,newPw});
+    window._currentUser.pw=newPw; saveStoredUser(window._currentUser);
+    showAuthMsg('chpw-error','chpw-success','✓ Password updated successfully!',false);
+    ['chpw-old','chpw-new','chpw-confirm'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});
+  }catch(e){ showAuthMsg('chpw-error','chpw-success',e.message,true); }
 };
 
 window.logoutUser=function(){
@@ -2013,18 +2000,15 @@ window.logoutUser=function(){
 };
 
 // ── BOOT ───────────────────────────────────────────────────────────
-const cfg=loadStoredConfig();
-if(cfg){
-  document.getElementById('setup-banner').style.display='none';
-  document.getElementById('fb-config-input').value=JSON.stringify(cfg,null,2);
-  connectFirebase(cfg);
-} else {
-  setSyncStatus('offline','Not connected');
-  renderDashboard();
-}
+// Hide Firebase banner - using PostgreSQL now
+document.getElementById('setup-banner').style.display='none';
+
 // Restore logged-in user session
 window._currentUser=loadStoredUser();
 updateAuthUI();
+
+// Load all data from PostgreSQL
+loadAll();
 </script>
 <script>if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js'); }</script>
 </body>
