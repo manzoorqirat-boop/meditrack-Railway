@@ -52,6 +52,18 @@ async function initDB() {
       ('w3','Pediatric Ward',6,'Pediatric')
       ON CONFLICT DO NOTHING`);
   }
+  // ── MIGRATIONS: add new columns if they don't exist yet ────────────
+  await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS username TEXT`);
+  await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS qual TEXT DEFAULT ''`);
+  // Backfill username from email for existing rows (use part before @)
+  await pool.query(`
+    UPDATE accounts SET username = LOWER(SPLIT_PART(email, '@', 1))
+    WHERE username IS NULL OR username = ''
+  `);
+  // Make username unique index (only if not already)
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS accounts_username_idx ON accounts(username)`);
+  console.log('Migrations applied');
+
   // Seed default admin if no accounts exist
   const { rowCount: adminCount } = await pool.query('SELECT 1 FROM accounts LIMIT 1');
   if (adminCount === 0) {
@@ -61,6 +73,9 @@ async function initDB() {
       ['admin-001','Administrator','admin','admin','admin@meditrack.local','','Administration','',defaultPw,new Date().toISOString()]
     );
     console.log('Default admin seeded — username: admin  password: Admin@123');
+  } else {
+    // Ensure existing admin has username set
+    await pool.query(`UPDATE accounts SET username='admin' WHERE role='admin' AND (username IS NULL OR username='')`);
   }
   console.log('Database ready');
 }
