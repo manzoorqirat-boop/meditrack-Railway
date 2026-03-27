@@ -52,6 +52,16 @@ async function initDB() {
       ('w3','Pediatric Ward',6,'Pediatric')
       ON CONFLICT DO NOTHING`);
   }
+  // Seed default admin if no accounts exist
+  const { rowCount: adminCount } = await pool.query('SELECT 1 FROM accounts LIMIT 1');
+  if (adminCount === 0) {
+    const defaultPw = await bcrypt.hash('Admin@123', 10);
+    await pool.query(
+      `INSERT INTO accounts VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
+      ['admin-001','Administrator','admin','admin@meditrack.local','','Administration','ADM-001',defaultPw,new Date().toISOString()]
+    );
+    console.log('Default admin seeded — email: admin@meditrack.local  password: Admin@123');
+  }
   console.log('Database ready');
 }
 
@@ -142,17 +152,37 @@ app.delete('/api/appointments/:id', async (req, res) => {
 });
 
 // ACCOUNTS
+app.get('/api/accounts', async (req, res) => {
+  const { adminEmail, adminPw } = req.query;
+  try {
+    const adminRow = await pool.query('SELECT * FROM accounts WHERE email=$1',[adminEmail]);
+    if (!adminRow.rowCount || !(await bcrypt.compare(adminPw, adminRow.rows[0].pw)))
+      return res.status(401).json({ ok:false, error:'Invalid admin credentials.' });
+    if (adminRow.rows[0].role !== 'admin')
+      return res.status(403).json({ ok:false, error:'Only admin can view users.' });
+    const r = await pool.query('SELECT id,name,role,email,mobile,dept,emp_id,created_at FROM accounts ORDER BY created_at DESC');
+    ok(res, r.rows);
+  } catch(e) { err(res,e); }
+});
+
 app.post('/api/accounts', async (req, res) => {
   const d = req.body;
   try {
+    // Verify admin credentials before creating any user
+    if (!d.adminEmail || !d.adminPw)
+      return res.status(401).json({ ok:false, error:'Admin credentials required to create users.' });
+    const adminRow = await pool.query('SELECT * FROM accounts WHERE email=$1',[d.adminEmail]);
+    if (!adminRow.rowCount || !(await bcrypt.compare(d.adminPw, adminRow.rows[0].pw)))
+      return res.status(401).json({ ok:false, error:'Invalid admin credentials.' });
+    if (adminRow.rows[0].role !== 'admin')
+      return res.status(403).json({ ok:false, error:'Only admin can create users.' });
     if (!d.pw || d.pw.length < 8) return res.status(400).json({ ok:false, error:'Password must be at least 8 characters.' });
     const exists = await pool.query('SELECT 1 FROM accounts WHERE email=$1',[d.email]);
     if (exists.rowCount > 0) return res.status(409).json({ ok:false, error:'An account with this email already exists.' });
     const hashedPw = await bcrypt.hash(d.pw, 10);
     await pool.query(`INSERT INTO accounts VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [d.id,d.name,d.role,d.email,d.mobile||'',d.dept||'',d.empId||'',hashedPw,d.createdAt||new Date().toISOString()]);
-    const { pw: _, ...safeUser } = d;
-    ok(res, safeUser);
+    ok(res, { id:d.id, name:d.name, role:d.role, email:d.email });
   } catch(e) { err(res,e); }
 });
 app.post('/api/accounts/login', async (req, res) => {
