@@ -40,14 +40,14 @@ window.showPage=function(id){
   if     (id==='dashboard')        renderDashboard();
   else if(id==='patients')         renderPatients(window._patientFilter);
   else if(id==='vitals')           { populatePatientSelect(); refreshNurseSelect(); }
-  else if(id==='wards')            renderWards();
-  else if(id==='staff')            renderStaffPage();
-  else if(id==='history')          { populateHistorySelect(); renderHistory(); }
-  else if(id==='appointments')     renderAppointments();
-  else if(id==='book-appointment') initBookAppt();
-  else if(id==='change-password')  renderChangePassword();
-  else if(id==='signup')           resetSignupForm();
-  else if(id==='login')            resetLoginForm();
+  else if(id==='wards')            { stopVitalsClock(); renderWards(); }
+  else if(id==='staff')            { stopVitalsClock(); renderStaffPage(); }
+  else if(id==='history')          { stopVitalsClock(); populateHistorySelect(); renderHistory(); }
+  else if(id==='appointments')     { stopVitalsClock(); renderAppointments(); }
+  else if(id==='book-appointment') { stopVitalsClock(); initBookAppt(); }
+  else if(id==='change-password')  { stopVitalsClock(); renderChangePassword(); }
+  else if(id==='signup')           { stopVitalsClock(); resetSignupForm(); }
+  else if(id==='login')            { stopVitalsClock(); resetLoginForm(); }
 };
 
 window.openDrawer=function(){ document.getElementById('drawer').classList.add('open'); document.getElementById('drawer-overlay').classList.add('open'); document.body.style.overflow='hidden'; };
@@ -212,8 +212,30 @@ window.dischargePatient=async function(id){
 function populatePatientSelect(){
   const admitted=window._patients.filter(p=>p.status==='admitted');
   document.getElementById('vitals-patient-select').innerHTML='<option value="">— choose patient —</option>'+admitted.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-  const now=new Date(); now.setSeconds(0,0);
-  document.getElementById('vitals-time').value=now.toISOString().slice(0,16);
+  setVitalsDateTime();
+  startVitalsClock();
+}
+
+function setVitalsDateTime(){
+  const now=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  const dateStr=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+  const timeStr=pad(now.getHours())+':'+pad(now.getMinutes());
+  const dateEl=document.getElementById('vitals-date-display');
+  const timeEl=document.getElementById('vitals-time-display');
+  const hiddenEl=document.getElementById('vitals-time');
+  if(dateEl) dateEl.textContent=now.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  if(timeEl) timeEl.textContent=now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+  if(hiddenEl) hiddenEl.value=dateStr+'T'+timeStr;
+}
+
+let _vitalsClockTimer=null;
+function startVitalsClock(){
+  if(_vitalsClockTimer) clearInterval(_vitalsClockTimer);
+  _vitalsClockTimer=setInterval(setVitalsDateTime,1000);
+}
+function stopVitalsClock(){
+  if(_vitalsClockTimer){ clearInterval(_vitalsClockTimer); _vitalsClockTimer=null; }
 }
 
 function refreshNurseSelect(selected){
@@ -707,7 +729,7 @@ window.submitCreateUser=async function(){
   try{
     const newUser = await api('POST','/api/accounts',{
       id:'u'+Date.now(), name, role, username, email, mobile, dept, qual,
-      pw, adminEmail:window._currentUser.username||window._currentUser.email, adminPw,
+      pw, adminUsername:window._currentUser.username, adminPw,
       createdAt:new Date().toISOString()
     });
     // Auto-sync to staff list
@@ -731,9 +753,9 @@ async function loadUsers(){
   if(!tbody) return;
   tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">Loading…</td></tr>';
   try{
-    const adminEmail=encodeURIComponent(window._currentUser.username||window._currentUser.email||'');
+    const adminUsername=encodeURIComponent(window._currentUser.username||'');
     const adminPw=encodeURIComponent(window._currentUser._adminPw||'');
-    const res=await fetch('/api/accounts?adminEmail='+adminEmail+'&adminPw='+adminPw);
+    const res=await fetch('/api/accounts?adminUsername='+adminUsername+'&adminPw='+adminPw);
     const json=await res.json();
     if(!json.ok) throw new Error(json.error);
     if(!json.data.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">No users yet.</td></tr>'; return; }
@@ -756,12 +778,12 @@ document.addEventListener('keydown', function(e){
 });
 
 window.doLogin=async function(){
-  const email=document.getElementById('login-email').value.trim();
+  const username=document.getElementById('login-email').value.trim();
   const pw=document.getElementById('login-pw').value;
   showAuthMsg('login-error','login-success','','');
-  if(!email||!pw){ showAuthMsg('login-error','login-success','Please enter username and password.',true); return; }
+  if(!username||!pw){ showAuthMsg('login-error','login-success','Please enter username and password.',true); return; }
   try{
-    const user=await api('POST','/api/accounts/login',{email,pw});
+    const user=await api('POST','/api/accounts/login',{username,pw});
     window._currentUser={...user}; saveStoredUser(window._currentUser);
     updateAuthUI();
     showAuthMsg('login-error','login-success','✓ Welcome back, '+user.name.split(' ')[0]+'!',false);
@@ -790,6 +812,8 @@ function resetLoginForm(){
   const pwEl=document.getElementById('login-pw');
   if(emailEl) emailEl.value='';
   if(pwEl) pwEl.value='';
+  showAuthMsg('login-error','login-success','','');
+}
   showAuthMsg('login-error','login-success','','');
 }
 window.logoutUser=function(){
