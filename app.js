@@ -1,0 +1,809 @@
+// ── STATE ──────────────────────────────────────────────────────────
+window._patients  = [];
+window._vitalsLog = [];
+window._staff     = [];
+window._wards     = [];
+window._editingPatientId = null;
+window._editingStaffId   = null;
+window._patientFilter    = 'all';
+
+// ── HELPERS ────────────────────────────────────────────────────────
+function ini(n){ return (n||'?').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(); }
+function getPatient(id){ return window._patients.find(p=>p.id===id); }
+function getWard(id){ return window._wards.find(w=>w.id===id); }
+
+function statusBadge(p){
+  if(p.status==='discharged') return '<span class="badge badge-gray">Discharged</span>';
+  const logs=window._vitalsLog.filter(l=>l.patientId===p.id);
+  if(!logs.length) return '<span class="badge badge-info">No logs</span>';
+  const l=logs[0],spo2=parseFloat(l.spo2),pulse=parseFloat(l.pulse),temp=parseFloat(l.temp);
+  if(spo2<93||pulse>110||pulse<50||temp>101||temp<96) return '<span class="badge badge-danger">Needs Attention</span>';
+  if(spo2<96||pulse>95||temp>100) return '<span class="badge badge-warn">Monitor</span>';
+  return '<span class="badge badge-ok">Stable</span>';
+}
+
+// ── SYNC UI ────────────────────────────────────────────────────────
+function setSyncStatus(state,text){
+  ['sync-dot','sync-dot-m'].forEach(id=>{ const e=document.getElementById(id); if(e) e.className='sync-dot '+state; });
+  ['sync-text','sync-text-m'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=text; });
+}
+function showLoading(msg){ document.getElementById('loading-text').textContent=msg||'Loading…'; document.getElementById('loading-overlay').classList.remove('hidden'); }
+function hideLoading(){ document.getElementById('loading-overlay').classList.add('hidden'); }
+
+// ── NAVIGATION ─────────────────────────────────────────────────────
+window.showPage=function(id){
+  if(id==='users') loadUsers();
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const pg=document.getElementById('page-'+id);
+  if(pg) pg.classList.add('active');
+  document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
+  if     (id==='dashboard')        renderDashboard();
+  else if(id==='patients')         renderPatients(window._patientFilter);
+  else if(id==='vitals')           { populatePatientSelect(); refreshNurseSelect(); }
+  else if(id==='wards')            renderWards();
+  else if(id==='staff')            renderStaffPage();
+  else if(id==='history')          { populateHistorySelect(); renderHistory(); }
+  else if(id==='appointments')     renderAppointments();
+  else if(id==='book-appointment') initBookAppt();
+  else if(id==='change-password')  renderChangePassword();
+  else if(id==='signup')           resetSignupForm();
+  else if(id==='login')            resetLoginForm();
+};
+
+window.openDrawer=function(){ document.getElementById('drawer').classList.add('open'); document.getElementById('drawer-overlay').classList.add('open'); document.body.style.overflow='hidden'; };
+window.closeDrawer=function(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('drawer-overlay').classList.remove('open'); document.body.style.overflow=''; };
+
+// ── REST API ───────────────────────────────────────────────────────
+async function api(method, path, body){
+  setSyncStatus('saving','Saving…');
+  try{
+    const res = await fetch(path,{
+      method, headers:{'Content-Type':'application/json'},
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const json = await res.json();
+    if(!json.ok) throw new Error(json.error||'Request failed');
+    setSyncStatus('live','Live · PostgreSQL');
+    return json.data;
+  } catch(e){
+    setSyncStatus('offline','Error: '+e.message);
+    throw e;
+  }
+}
+
+async function loadAll(){
+  setSyncStatus('saving','Loading…'); showLoading('Loading data…');
+  try{
+    const [patients,vitals,wards,staff,appts] = await Promise.all([
+      api('GET','/api/patients'),
+      api('GET','/api/vitals'),
+      api('GET','/api/wards'),
+      api('GET','/api/staff'),
+      api('GET','/api/appointments'),
+    ]);
+    window._patients     = patients.map(normalizePatient);
+    window._vitalsLog    = vitals.map(normalizeVital);
+    window._wards        = wards.map(normalizeWard);
+    window._staff        = staff.map(normalizeStaff);
+    window._appointments = appts.map(normalizeAppt);
+    setSyncStatus('live','Live · PostgreSQL');
+    hideLoading();
+    renderDashboard();
+  } catch(e){ setSyncStatus('offline','Load failed'); hideLoading(); }
+}
+
+// Normalize snake_case from DB → camelCase used in UI
+function normalizePatient(r){ return {id:r.id,name:r.name,age:r.age,gender:r.gender,blood:r.blood,contact:r.contact,wardId:r.ward_id,admitDate:r.admit_date,doctor:r.doctor,diagnosis:r.diagnosis,allergies:r.allergies,status:r.status,dischargeDate:r.discharge_date,updatedAt:r.updated_at}; }
+function normalizeVital(r){ return {id:r.id,patientId:r.patient_id,time:r.time,bp:r.bp,pulse:r.pulse,temp:r.temp,spo2:r.spo2,resp:r.resp,glucose:r.glucose,pain:r.pain,nurse:r.nurse,notes:r.notes,savedAt:r.saved_at}; }
+function normalizeWard(r){ return {id:r.id,name:r.name,beds:r.beds,type:r.type}; }
+function normalizeStaff(r){ return {id:r.id,name:r.name,role:r.role,dept:r.dept,qual:r.qual,contact:r.contact}; }
+function normalizeAppt(r){ return {id:r.id,patientName:r.patient_name,mobile:r.mobile,age:r.age,gender:r.gender,date:r.date,time:r.time,doctor:r.doctor,dept:r.dept,reason:r.reason,notes:r.notes,status:r.status,createdAt:r.created_at}; }
+
+function refreshCurrentPage(){
+  const active=document.querySelector('.page.active'); if(!active) return;
+  const id=active.id.replace('page-','');
+  if     (id==='dashboard')    renderDashboard();
+  else if(id==='patients')     renderPatients(window._patientFilter);
+  else if(id==='vitals')       { populatePatientSelect(); refreshNurseSelect(); }
+  else if(id==='wards')        renderWards();
+  else if(id==='staff')        renderStaffPage();
+  else if(id==='history')      { populateHistorySelect(); renderHistory(); }
+  else if(id==='appointments') renderAppointments();
+}
+
+// ── DASHBOARD ──────────────────────────────────────────────────────
+function renderDashboard(){
+  document.getElementById('dash-time').textContent=new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'});
+  const admitted=window._patients.filter(p=>p.status==='admitted');
+  const todayStr=new Date().toISOString().split('T')[0];
+  const warn=admitted.filter(p=>{ const logs=window._vitalsLog.filter(l=>l.patientId===p.id); if(!logs.length) return false; const l=logs[0]; return parseFloat(l.spo2)<93||parseFloat(l.pulse)>110||parseFloat(l.pulse)<50||parseFloat(l.temp)>101||parseFloat(l.temp)<96; });
+  document.getElementById('stat-total').textContent=window._patients.length;
+  document.getElementById('stat-today').textContent=window._patients.filter(p=>p.admitDate===todayStr&&p.status==='admitted').length;
+  document.getElementById('stat-warn').textContent=warn.length;
+  document.getElementById('stat-logs').textContent=window._vitalsLog.filter(l=>l.time&&l.time.startsWith(todayStr)).length;
+  document.getElementById('alert-area').innerHTML=warn.map(p=>`<div class="alert-banner"><span style="font-size:16px">⚠</span><b>${p.name}</b> — abnormal vitals. Immediate review recommended.</div>`).join('');
+  const recent=window._vitalsLog.slice(0,5);
+  document.getElementById('dash-activity').innerHTML=recent.length?recent.map(l=>{
+    const p=getPatient(l.patientId);
+    const t=l.time?new Date(l.time).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'}):'—';
+    return `<div class="history-row"><span class="time-badge">${t}</span><div><div style="font-size:13px;font-weight:500">${p?p.name:'Unknown'}</div><div class="vitals-chips"><span class="v-chip">BP ${l.bp||'—'}</span><span class="v-chip">Pulse ${l.pulse||'—'} bpm</span><span class="v-chip">Temp ${l.temp||'—'}°F</span><span class="v-chip ${parseFloat(l.spo2)<94?'abnormal':''}">SpO2 ${l.spo2||'—'}%</span></div></div></div>`;
+  }).join(''):'<div class="empty-state">No vitals recorded yet.</div>';
+  document.getElementById('dash-patients').innerHTML=admitted.map(p=>`<div class="patient-row"><div class="patient-info"><div class="avatar">${ini(p.name)}</div><div><div class="patient-name">${p.name}</div><div class="patient-meta">${p.age||''}y · ${p.gender||''} · ${getWard(p.wardId)?getWard(p.wardId).name:'No ward'}</div></div></div>${statusBadge(p)}</div>`).join('')||'<div class="empty-state">No admitted patients.</div>';
+}
+
+// ── PATIENTS ───────────────────────────────────────────────────────
+function renderPatients(filter){
+  window._patientFilter=filter;
+  let list=window._patients;
+  if(filter==='admitted')   list=list.filter(p=>p.status==='admitted');
+  if(filter==='discharged') list=list.filter(p=>p.status==='discharged');
+  document.getElementById('patient-list').innerHTML=list.length?list.map(p=>{
+    const ward=getWard(p.wardId);
+    return `<div class="patient-row"><div class="patient-info"><div class="avatar">${ini(p.name)}</div><div><div class="patient-name">${p.name}</div><div class="patient-meta">${p.age||''}y · ${p.gender||''} · ${p.blood||''} · ${ward?ward.name:'—'} · ${p.doctor||'—'}</div><div class="patient-meta" style="margin-top:2px">${p.diagnosis||''}</div></div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${statusBadge(p)}<button class="btn sm" onclick="editPatient('${p.id}')">Edit</button><button class="btn sm" onclick="logVitalsFor('${p.id}')">Log Vitals</button>${p.status==='admitted'?`<button class="btn sm" onclick="dischargePatient('${p.id}')">Discharge</button>`:''}</div></div>`;
+  }).join(''):'<div class="empty-state">No patients found.</div>';
+}
+
+window.filterPatients=function(f,el){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); el.classList.add('active'); renderPatients(f); };
+
+function refreshDoctorSelect(selected){
+  const el=document.getElementById('p-doctor'); if(!el) return;
+  const docs=window._staff.filter(s=>s.role==='doctor');
+  el.innerHTML=docs.length
+    ? '<option value="">— select doctor —</option>'+docs.map(d=>`<option value="${d.name}"${selected===d.name?' selected':''}>${d.name}${d.dept?' · '+d.dept:''}</option>`).join('')
+    : '<option value="">— no doctors added yet —</option>';
+}
+
+window.openAddPatient=function(){
+  window._editingPatientId=null;
+  document.getElementById('modal-patient-title').textContent='Add New Patient';
+  ['p-name','p-age','p-contact','p-diagnosis','p-allergies'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('p-admit').value=new Date().toISOString().split('T')[0];
+  // ward select
+  document.getElementById('p-ward').innerHTML='<option value="">— no ward —</option>'+window._wards.map(w=>`<option value="${w.id}">${w.name}</option>`).join('');
+  refreshDoctorSelect();
+  document.getElementById('modal-patient').classList.add('open');
+};
+
+window.editPatient=function(id){
+  const p=getPatient(id); if(!p) return;
+  window._editingPatientId=id;
+  document.getElementById('modal-patient-title').textContent='Edit Patient';
+  document.getElementById('p-name').value=p.name||'';
+  document.getElementById('p-age').value=p.age||'';
+  document.getElementById('p-gender').value=p.gender||'Male';
+  document.getElementById('p-blood').value=p.blood||'A+';
+  document.getElementById('p-contact').value=p.contact||'';
+  document.getElementById('p-admit').value=p.admitDate||'';
+  document.getElementById('p-diagnosis').value=p.diagnosis||'';
+  document.getElementById('p-allergies').value=p.allergies||'';
+  document.getElementById('p-ward').innerHTML='<option value="">— no ward —</option>'+window._wards.map(w=>`<option value="${w.id}"${p.wardId===w.id?' selected':''}>${w.name}</option>`).join('');
+  refreshDoctorSelect(p.doctor);
+  document.getElementById('modal-patient').classList.add('open');
+};
+
+window.savePatient=async function(){
+  const name=document.getElementById('p-name').value.trim();
+  if(!name){ alert('Patient name is required.'); return; }
+  const id=window._editingPatientId||('p'+Date.now());
+  const existing=getPatient(id)||{};
+  const data={...existing,id,name,age:document.getElementById('p-age').value,gender:document.getElementById('p-gender').value,blood:document.getElementById('p-blood').value,contact:document.getElementById('p-contact').value,wardId:document.getElementById('p-ward').value,admitDate:document.getElementById('p-admit').value,doctor:document.getElementById('p-doctor').value,diagnosis:document.getElementById('p-diagnosis').value,allergies:document.getElementById('p-allergies').value,status:existing.status||'admitted',updatedAt:new Date().toISOString()};
+  closeModal('modal-patient');
+  try{
+    await api('POST','/api/patients',data);
+    const idx=window._patients.findIndex(p=>p.id===id);
+    if(idx>-1) window._patients[idx]=data; else window._patients.push(data);
+    renderPatients(window._patientFilter);
+  }catch(e){ alert('Save failed: '+e.message); }
+};
+
+window.dischargePatient=async function(id){
+  const p=getPatient(id); if(!p) return;
+  if(!confirm('Mark '+p.name+' as discharged?')) return;
+  const updated={...p,status:'discharged',dischargeDate:new Date().toISOString()};
+  try{
+    await api('POST','/api/patients',updated);
+    const idx=window._patients.findIndex(x=>x.id===id);
+    if(idx>-1) window._patients[idx]=updated;
+    renderPatients(window._patientFilter);
+  }catch(e){ alert('Failed: '+e.message); }
+};
+
+// ── VITALS ─────────────────────────────────────────────────────────
+function populatePatientSelect(){
+  const admitted=window._patients.filter(p=>p.status==='admitted');
+  document.getElementById('vitals-patient-select').innerHTML='<option value="">— choose patient —</option>'+admitted.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const now=new Date(); now.setSeconds(0,0);
+  document.getElementById('vitals-time').value=now.toISOString().slice(0,16);
+}
+
+function refreshNurseSelect(selected){
+  const el=document.getElementById('v-nurse'); if(!el) return;
+  const nurses=window._staff.filter(s=>s.role!=='doctor');
+  el.innerHTML=nurses.length
+    ? '<option value="">— select nurse / staff —</option>'+nurses.map(n=>`<option value="${n.name}"${selected===n.name?' selected':''}>${n.name}${n.role==='nurse'?' (Nurse)':' (Staff)'}${n.dept?' · '+n.dept:''}</option>`).join('')
+    : '<option value="">— no nurses added yet —</option>';
+}
+
+window.logVitalsFor=function(pid){ showPage('vitals'); setTimeout(()=>{ document.getElementById('vitals-patient-select').value=pid; },100); };
+
+window.saveVitals=async function(){
+  const pid=document.getElementById('vitals-patient-select').value;
+  if(!pid){ alert('Please select a patient.'); return; }
+  const id='l'+Date.now();
+  const log={id,patientId:pid,time:document.getElementById('vitals-time').value,bp:document.getElementById('v-bp').value,pulse:document.getElementById('v-pulse').value,temp:document.getElementById('v-temp').value,spo2:document.getElementById('v-spo2').value,resp:document.getElementById('v-resp').value,glucose:document.getElementById('v-glucose').value,pain:document.getElementById('v-pain').value,nurse:document.getElementById('v-nurse').value,notes:document.getElementById('v-notes').value,savedAt:new Date().toISOString()};
+  try{
+    await api('POST','/api/vitals',log);
+    window._vitalsLog.unshift(log);
+    alert('Vitals saved for '+getPatient(pid).name+'!');
+    clearVitalsForm();
+  }catch(e){ alert('Save failed: '+e.message); }
+};
+
+window.clearVitalsForm=function(){
+  ['v-bp','v-pulse','v-temp','v-spo2','v-resp','v-glucose','v-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('v-pain').value=0; document.getElementById('pain-out').textContent='0';
+  document.getElementById('v-nurse').value='';
+};
+
+// ── WARDS ──────────────────────────────────────────────────────────
+function renderWards(){
+  document.getElementById('ward-grid').innerHTML=window._wards.map(w=>{
+    const occ=window._patients.filter(p=>p.wardId===w.id&&p.status==='admitted').length;
+    const pct=Math.round(occ/(w.beds||1)*100);
+    const cls=pct>=90?'badge-danger':pct>=70?'badge-warn':'badge-ok';
+    const bar=pct>=90?'#E24B4A':pct>=70?'#EF9F27':'#1D9E75';
+    return `<div class="ward-card"><div class="ward-type">${w.type}</div><div class="ward-name">${w.name}</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px"><span class="badge ${cls}">${occ}/${w.beds} beds</span><span style="font-size:11px;color:var(--text-2)">${pct}% full</span></div><div style="margin-top:10px;height:4px;background:var(--bg-2);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${bar};border-radius:2px"></div></div></div>`;
+  }).join('')||'<div class="empty-state">No wards configured.</div>';
+}
+
+window.openAddWard=function(){ document.getElementById('modal-ward').classList.add('open'); };
+window.saveWard=async function(){
+  const name=document.getElementById('w-name').value.trim();
+  if(!name){ alert('Ward name required.'); return; }
+  const id='w'+Date.now();
+  const ward={id,name,beds:parseInt(document.getElementById('w-beds').value)||10,type:document.getElementById('w-type').value};
+  closeModal('modal-ward');
+  try{
+    await api('POST','/api/wards',ward);
+    window._wards.push(ward);
+    ['w-name','w-beds'].forEach(i=>document.getElementById(i).value='');
+    renderWards();
+  }catch(e){ alert('Save failed: '+e.message); }
+};
+
+// ── STAFF ──────────────────────────────────────────────────────────
+function renderStaffPage(){
+  const doctors=window._staff.filter(s=>s.role==='doctor');
+  const nurses=window._staff.filter(s=>s.role!=='doctor');
+
+  function card(s){
+    const avcls=s.role==='doctor'?'doctor':s.role==='nurse'?'nurse':'other';
+    const bdg=s.role==='doctor'?'<span class="badge badge-info">Doctor</span>':s.role==='nurse'?'<span class="badge badge-ok">Nurse</span>':'<span class="badge badge-purple">Staff</span>';
+    const sub=[s.qual,s.dept].filter(Boolean).join(' · ')||'—';
+    return `<div class="staff-card">
+      <div class="staff-card-top">
+        <div class="staff-av ${avcls}">${ini(s.name)}</div>
+        <div><div class="staff-nm">${s.name}</div><div class="staff-sub">${sub}</div></div>
+      </div>
+      <div class="staff-row2">${bdg}<span class="staff-contact">${s.contact||''}</span></div>
+      <div class="staff-acts">
+        <button class="btn sm" onclick="openEditStaff('${s.id}')">Edit</button>
+        <button class="btn sm danger" onclick="removeStaff('${s.id}','${(s.name||'').replace(/'/g,'')}')">Remove</button>
+      </div>
+    </div>`;
+  }
+
+  const dEl=document.getElementById('staff-grid-doctors');
+  const nEl=document.getElementById('staff-grid-nurses');
+  if(dEl) dEl.innerHTML=doctors.length?doctors.map(card).join(''):'<div class="staff-empty">No doctors added yet. Add a user with the Doctor role to see them here.</div>';
+  if(nEl) nEl.innerHTML=nurses.length?nurses.map(card).join(''):'<div class="staff-empty">No nurses or staff added yet. Add users with Nurse or Staff roles to see them here.</div>';
+}
+
+window.openAddStaff=function(role){
+  window._editingStaffId=null;
+  document.getElementById('modal-staff-title').textContent=role==='doctor'?'Add Doctor':'Add Nurse / Staff';
+  ['st-name','st-dept','st-qual','st-contact'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('st-role').value=role||'nurse';
+  document.getElementById('modal-staff').classList.add('open');
+};
+
+window.openEditStaff=function(id){
+  const s=window._staff.find(x=>x.id===id); if(!s) return;
+  window._editingStaffId=id;
+  document.getElementById('modal-staff-title').textContent='Edit Staff';
+  document.getElementById('st-name').value=s.name||'';
+  document.getElementById('st-role').value=s.role||'nurse';
+  document.getElementById('st-dept').value=s.dept||'';
+  document.getElementById('st-qual').value=s.qual||'';
+  document.getElementById('st-contact').value=s.contact||'';
+  document.getElementById('modal-staff').classList.add('open');
+};
+
+window.saveStaff=async function(){
+  const name=document.getElementById('st-name').value.trim();
+  if(!name){ alert('Name is required.'); return; }
+  const id=window._editingStaffId||('stf'+Date.now());
+  const data={id,name,role:document.getElementById('st-role').value,dept:document.getElementById('st-dept').value.trim(),qual:document.getElementById('st-qual').value.trim(),contact:document.getElementById('st-contact').value.trim()};
+  closeModal('modal-staff');
+  try{
+    await api('POST','/api/staff',data);
+    const idx=window._staff.findIndex(s=>s.id===id);
+    if(idx>-1) window._staff[idx]=data; else window._staff.push(data);
+    renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
+  }catch(e){ alert('Save failed: '+e.message); }
+};
+
+window.removeStaff=async function(id,name){
+  if(!confirm('Remove '+name+' from staff list?')) return;
+  try{
+    await api('DELETE','/api/staff/'+id);
+    window._staff=window._staff.filter(s=>s.id!==id);
+    renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
+  }catch(e){ alert('Failed: '+e.message); }
+};
+
+// ── HISTORY / REPORT ───────────────────────────────────────────────
+function populateHistorySelect(){
+  document.getElementById('hist-patient').innerHTML='<option value="">All Patients</option>'+window._patients.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+}
+
+window.clearHistFilter=function(){
+  document.getElementById('hist-patient').value='';
+  document.getElementById('hist-date-from').value='';
+  document.getElementById('hist-date-to').value='';
+  document.getElementById('hist-status').value='';
+  renderHistory();
+};
+
+window.renderHistory=function(){
+  const pid    = document.getElementById('hist-patient').value;
+  const from   = document.getElementById('hist-date-from').value;
+  const to     = document.getElementById('hist-date-to').value;
+  const status = document.getElementById('hist-status').value;
+
+  let logs = window._vitalsLog.slice();
+  if(pid)  logs = logs.filter(l => l.patientId === pid);
+  if(from) logs = logs.filter(l => l.time && l.time >= from);
+  if(to)   logs = logs.filter(l => l.time && l.time.slice(0,10) <= to);
+
+  // Annotate abnormal flags
+  logs = logs.map(l => {
+    const as = parseFloat(l.spo2) < 94;
+    const ap = parseFloat(l.pulse) > 110 || parseFloat(l.pulse) < 50;
+    const at = parseFloat(l.temp) > 101  || parseFloat(l.temp) < 96;
+    const ag = parseFloat(l.glucose) > 180 || parseFloat(l.glucose) < 70;
+    return {...l, _abnormal: as||ap||at||ag, _as:as, _ap:ap, _at:at, _ag:ag};
+  });
+
+  if(status === 'abnormal') logs = logs.filter(l => l._abnormal);
+  if(status === 'normal')   logs = logs.filter(l => !l._abnormal);
+
+  const container = document.getElementById('history-list');
+  if(!logs.length){
+    container.innerHTML = `<div class="card"><div class="empty-state">No vitals records match the current filter.</div></div>`;
+    return;
+  }
+
+  // Summary stats
+  const total     = logs.length;
+  const abnCount  = logs.filter(l => l._abnormal).length;
+  const normCount = total - abnCount;
+  const uniquePts = [...new Set(logs.map(l => l.patientId))].length;
+
+  // Determine report scope label
+  const selPt   = window._patients.find(p => p.id === pid);
+  const scopeLbl = selPt ? selPt.name : 'All Patients';
+  const fromLbl  = from  ? new Date(from).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
+  const toLbl    = to    ? new Date(to).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
+  const now      = new Date().toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  // Group logs by patient → by date
+  const grouped = {};
+  logs.forEach(l => {
+    const p   = getPatient(l.patientId);
+    const key = l.patientId || 'unknown';
+    if(!grouped[key]) grouped[key] = { patient: p, logs: [] };
+    grouped[key].logs.push(l);
+  });
+
+  let html = `
+  <div id="report-doc">
+    <!-- REPORT HEADER -->
+    <div class="rpt-header">
+      <div class="rpt-logo-row">
+        <div class="rpt-logo-icon"><div class="logo-cross"></div></div>
+        <div>
+          <div class="rpt-hospital">MediTrack Hospital Management</div>
+          <div class="rpt-sub">Patient Vitals History Report</div>
+        </div>
+        <div class="rpt-meta-box">
+          <div class="rpt-meta-row"><span>Generated</span><span>${now}</span></div>
+          <div class="rpt-meta-row"><span>Patient</span><span>${scopeLbl}</span></div>
+          <div class="rpt-meta-row"><span>Period</span><span>${fromLbl} – ${toLbl}</span></div>
+        </div>
+      </div>
+      <div class="rpt-divider"></div>
+      <!-- Summary strip -->
+      <div class="rpt-summary-row">
+        <div class="rpt-sum-box">
+          <div class="rpt-sum-num">${total}</div>
+          <div class="rpt-sum-lbl">Total Records</div>
+        </div>
+        <div class="rpt-sum-box">
+          <div class="rpt-sum-num" style="color:var(--ok)">${normCount}</div>
+          <div class="rpt-sum-lbl">Normal</div>
+        </div>
+        <div class="rpt-sum-box">
+          <div class="rpt-sum-num" style="color:var(--danger)">${abnCount}</div>
+          <div class="rpt-sum-lbl">Abnormal</div>
+        </div>
+        <div class="rpt-sum-box">
+          <div class="rpt-sum-num">${uniquePts}</div>
+          <div class="rpt-sum-lbl">Patient${uniquePts!==1?'s':''}</div>
+        </div>
+      </div>
+    </div>`;
+
+  // Per-patient sections
+  Object.values(grouped).forEach(({patient: pt, logs: ptLogs}) => {
+    const ptName  = pt ? pt.name : 'Unknown Patient';
+    const ptMeta  = pt ? [pt.age?pt.age+'y':'', pt.gender||'', pt.blood||'', pt.doctor?'Dr. '+pt.doctor:''].filter(Boolean).join(' · ') : '';
+    const ptAbnorm= ptLogs.filter(l=>l._abnormal).length;
+
+    html += `
+    <div class="rpt-patient-section">
+      <div class="rpt-patient-header">
+        <div class="rpt-patient-av">${ini(ptName)}</div>
+        <div>
+          <div class="rpt-patient-name">${ptName}</div>
+          ${ptMeta ? `<div class="rpt-patient-meta">${ptMeta}</div>` : ''}
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <span class="badge badge-ok">${ptLogs.length - ptAbnorm} Normal</span>
+          ${ptAbnorm ? `<span class="badge badge-danger">${ptAbnorm} Abnormal</span>` : ''}
+        </div>
+      </div>
+
+      <!-- Vitals table -->
+      <div class="rpt-table-wrap">
+        <table class="rpt-table">
+          <thead>
+            <tr>
+              <th>Date &amp; Time</th>
+              <th>BP<br><span class="rpt-unit">mmHg</span></th>
+              <th>Pulse<br><span class="rpt-unit">bpm</span></th>
+              <th>Temp<br><span class="rpt-unit">°F</span></th>
+              <th>SpO2<br><span class="rpt-unit">%</span></th>
+              <th>RR<br><span class="rpt-unit">/min</span></th>
+              <th>Glucose<br><span class="rpt-unit">mg/dL</span></th>
+              <th>Pain<br><span class="rpt-unit">/10</span></th>
+              <th>Recorded By</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+    ptLogs.forEach(l => {
+      const t = l.time ? new Date(l.time).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+      html += `
+            <tr class="${l._abnormal ? 'rpt-row-abnormal' : ''}">
+              <td class="rpt-td-time">${t}</td>
+              <td>${l.bp||'—'}</td>
+              <td class="${l._ap?'rpt-cell-warn':''}">${l.pulse||'—'}</td>
+              <td class="${l._at?'rpt-cell-warn':''}">${l.temp||'—'}</td>
+              <td class="${l._as?'rpt-cell-warn':''}">${l.spo2||'—'}</td>
+              <td>${l.resp||'—'}</td>
+              <td class="${l._ag?'rpt-cell-warn':''}">${l.glucose||'—'}</td>
+              <td>${l.pain||'—'}</td>
+              <td>${l.nurse||'—'}</td>
+              <td>${l._abnormal
+                ? '<span class="badge badge-danger">Abnormal</span>'
+                : '<span class="badge badge-ok">Normal</span>'}</td>
+            </tr>
+            ${l.notes ? `<tr class="rpt-notes-row"><td colspan="10"><span class="rpt-notes-label">Notes:</span> ${l.notes}</td></tr>` : ''}`;
+    });
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  });
+
+  html += `
+    <!-- REPORT FOOTER -->
+    <div class="rpt-footer">
+      <div>This report is computer-generated by MediTrack Hospital Management System.</div>
+      <div>Reference ranges: BP 90–140/60–90 mmHg · Pulse 50–110 bpm · Temp 96–101°F · SpO2 ≥94% · Glucose 70–180 mg/dL</div>
+    </div>
+  </div>`;
+
+  container.innerHTML = html;
+};
+
+window.printReport=function(){
+  // Re-render with current filters first, then print
+  renderHistory();
+  const el = document.getElementById('report-doc');
+  if(!el){ alert('No report to print. Apply filters first.'); return; }
+  window.print();
+};
+
+// ── MODALS ─────────────────────────────────────────────────────────
+window.closeModal=function(id){ document.getElementById(id).classList.remove('open'); };
+document.querySelectorAll('.modal-backdrop').forEach(b=>{ b.addEventListener('click',e=>{ if(e.target===b) b.classList.remove('open'); }); });
+window.openSetup=function(){}; // Firebase removed - using Railway PostgreSQL
+window.closeSetup=function(){ document.getElementById('setup-modal').classList.remove('open'); };
+
+// ── APPOINTMENTS ──────────────────────────────────────────────────
+window._appointments = [];
+
+function todayStr(){ return new Date().toISOString().split('T')[0]; }
+
+function refreshApptDoctorSelect(){
+  const el=document.getElementById('appt-doctor'); if(!el) return;
+  const docs=window._staff.filter(s=>s.role==='doctor');
+  el.innerHTML='<option value="">— select doctor —</option>'+docs.map(d=>`<option value="${d.name}">${d.name}${d.dept?' · '+d.dept:''}</option>`).join('');
+}
+
+function initBookAppt(){
+  document.getElementById('appt-date').value=todayStr();
+  refreshApptDoctorSelect();
+  ['appt-pname','appt-mobile','appt-reason','appt-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('appt-age').value='';
+  document.getElementById('appt-appttime').value='';
+  const msg=document.getElementById('appt-form-msg');
+  if(msg){msg.style.display='none';}
+}
+
+function renderAppointments(filter){
+  window._apptFilter=filter||window._apptFilter||'all';
+  const today=todayStr();
+  let list=window._appointments.slice().sort((a,b)=>a.date>b.date?1:-1);
+  const todayList=list.filter(a=>a.date===today);
+  const upcoming=list.filter(a=>a.date>today);
+  document.getElementById('appt-stat-today').textContent=todayList.length;
+  document.getElementById('appt-stat-upcoming').textContent=upcoming.length;
+  document.getElementById('appt-stat-total').textContent=list.length;
+  if(window._apptFilter==='today')     list=todayList;
+  else if(window._apptFilter==='upcoming')  list=upcoming;
+  else if(window._apptFilter==='completed') list=list.filter(a=>a.status==='completed');
+  document.getElementById('appt-list').innerHTML=list.length?list.map(a=>{
+    const dLabel=a.date===today?'Today':a.date;
+    const sBadge=a.status==='completed'?'<span class="badge badge-ok">Completed</span>':a.date<today?'<span class="badge badge-gray">Past</span>':a.date===today?'<span class="badge badge-warn">Today</span>':'<span class="badge badge-info">Upcoming</span>';
+    return `<div class="appt-row">
+      <div class="appt-info">
+        <div><div class="appt-time">${a.time||'—'}</div><div style="font-size:10px;color:var(--text-2)">${dLabel}</div></div>
+        <div class="avatar">${ini(a.patientName)}</div>
+        <div><div class="appt-name">${a.patientName}</div><div class="appt-meta">${a.doctor?'Dr. '+a.doctor:'—'} · ${a.dept||'—'}</div><div class="appt-meta">${a.reason||''}</div></div>
+      </div>
+      <div class="appt-actions">${sBadge}${a.status!=='completed'?`<button class="btn sm" onclick="markApptDone('${a.id}')">Done</button>`:''}<button class="btn sm danger" onclick="deleteAppt('${a.id}')">✕</button></div>
+    </div>`;
+  }).join(''):'<div class="empty-state">No appointments found.</div>';
+}
+
+window.filterAppts=function(f,el){ document.querySelectorAll('#page-appointments .tab').forEach(t=>t.classList.remove('active')); el.classList.add('active'); renderAppointments(f); };
+
+window.saveAppointment=async function(){
+  const name=document.getElementById('appt-pname').value.trim();
+  const mobile=document.getElementById('appt-mobile').value.trim();
+  const date=document.getElementById('appt-date').value;
+  if(!name||!mobile||!date){ alert('Patient name, mobile, and date are required.'); return; }
+  const id='apt'+Date.now();
+  const appt={id,patientName:name,mobile,age:document.getElementById('appt-age').value,gender:document.getElementById('appt-gender').value,date,time:document.getElementById('appt-appttime').value,doctor:document.getElementById('appt-doctor').value,dept:document.getElementById('appt-dept').value,reason:document.getElementById('appt-reason').value.trim(),notes:document.getElementById('appt-notes').value.trim(),status:'scheduled',createdAt:new Date().toISOString()};
+  try{
+    await api('POST','/api/appointments',appt);
+    window._appointments.unshift(appt);
+    const m=document.getElementById('appt-form-msg');
+    if(m){m.textContent='✓ Appointment booked for '+name+'!';m.style.display='block';setTimeout(()=>{m.style.display='none';showPage('appointments');},1500);}
+  }catch(e){ alert('Save failed: '+e.message); }
+};
+
+window.markApptDone=async function(id){
+  const idx=window._appointments.findIndex(a=>a.id===id); if(idx<0) return;
+  const updated={...window._appointments[idx],status:'completed'};
+  try{
+    await api('POST','/api/appointments',updated);
+    window._appointments[idx]=updated; renderAppointments();
+  }catch(e){ alert('Failed: '+e.message); }
+};
+
+window.deleteAppt=async function(id){
+  if(!confirm('Remove this appointment?')) return;
+  try{
+    await api('DELETE','/api/appointments/'+id);
+    window._appointments=window._appointments.filter(a=>a.id!==id); renderAppointments();
+  }catch(e){ alert('Failed: '+e.message); }
+};
+
+// ── ACCOUNT / AUTH ─────────────────────────────────────────────────
+window._currentUser=null;
+
+function updateAuthUI(){
+  const u=window._currentUser;
+  const loggedIn=!!u;
+  const isAdmin=loggedIn&&u.role==='admin';
+  document.getElementById('nav-loggedin').style.display=loggedIn?'inline-flex':'none';
+  document.getElementById('nav-loggedout').style.display=loggedIn?'none':'inline-flex';
+  document.getElementById('drawer-loggedin').style.display=loggedIn?'block':'none';
+  document.getElementById('drawer-loggedout').style.display=loggedIn?'none':'block';
+  // Show Users nav only for admin
+  const navUsersBtn=document.getElementById('nav-users-btn');
+  if(navUsersBtn) navUsersBtn.style.display=isAdmin?'inline-flex':'none';
+  const drawerUsersBtn=document.getElementById('drawer-users-btn');
+  if(drawerUsersBtn) drawerUsersBtn.style.display=isAdmin?'flex':'none';
+  // Bottom nav account btn
+  const bnavAcc=document.getElementById('bnav-account');
+  if(bnavAcc){ bnavAcc.innerHTML=loggedIn?'<span class="b-icon">👤</span>Account':'<span class="b-icon">🔑</span>Login'; }
+  if(loggedIn){
+    const av=ini(u.name);
+    document.getElementById('user-av-top').textContent=av;
+    document.getElementById('user-name-top').textContent=u.name.split(' ')[0];
+    document.getElementById('user-av-drawer').textContent=av;
+    document.getElementById('user-name-drawer').textContent=u.name;
+    document.getElementById('user-role-drawer').textContent=u.role||'';
+    if(isAdmin) loadUsers();
+  }
+}
+
+function loadStoredUser(){
+  try{ const s=localStorage.getItem('meditrack_user'); return s?JSON.parse(s):null; }catch(e){ return null; }
+}
+function saveStoredUser(u){ try{ localStorage.setItem('meditrack_user',JSON.stringify(u)); }catch(e){} }
+function clearStoredUser(){ try{ localStorage.removeItem('meditrack_user'); }catch(e){} }
+
+function showAuthMsg(errId,sucId,msg,isErr){
+  const eEl=document.getElementById(errId), sEl=document.getElementById(sucId);
+  if(eEl) eEl.style.display='none'; if(sEl) sEl.style.display='none';
+  if(isErr&&eEl){ eEl.textContent=msg; eEl.style.display='block'; }
+  else if(!isErr&&sEl){ sEl.textContent=msg; sEl.style.display='block'; }
+}
+
+window.togglePw=function(inputId,btn){
+  const inp=document.getElementById(inputId); if(!inp) return;
+  const show=inp.type==='password'; inp.type=show?'text':'password'; btn.textContent=show?'🙈':'👁';
+};
+
+window.checkStrength=function(pw,fillId,labelId){
+  fillId=fillId||'strength-fill'; labelId=labelId||'strength-label';
+  const fill=document.getElementById(fillId), label=document.getElementById(labelId);
+  if(!fill||!label) return;
+  let score=0;
+  if(pw.length>=8) score++;
+  if(/[A-Z]/.test(pw)) score++;
+  if(/[0-9]/.test(pw)) score++;
+  if(/[^A-Za-z0-9]/.test(pw)) score++;
+  const map=[[0,'#ef4444','Very weak'],[1,'#f97316','Weak'],[2,'#eab308','Fair'],[3,'#22c55e','Strong'],[4,'#0F6E56','Very strong']];
+  const [,clr,lbl]=map[score]||map[0];
+  fill.style.width=(score*25)+'%'; fill.style.background=clr; label.textContent=lbl;
+};
+
+// ── USER MANAGEMENT (admin only) ───────────────────────────────────
+window.openCreateUser=function(){
+  document.getElementById('create-user-card').style.display='block';
+  document.getElementById('cu-error').style.display='none';
+};
+window.closeCreateUser=function(){
+  document.getElementById('create-user-card').style.display='none';
+  ['cu-name','cu-username','cu-email','cu-mobile','cu-qual','cu-pw','cu-admin-pw'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+};
+window.submitCreateUser=async function(){
+  const errEl=document.getElementById('cu-error');
+  errEl.style.display='none';
+  const name=document.getElementById('cu-name').value.trim();
+  const username=document.getElementById('cu-username').value.trim().toLowerCase().replace(/\s+/g,'');
+  const email=document.getElementById('cu-email').value.trim();
+  const role=document.getElementById('cu-role').value;
+  const mobile=document.getElementById('cu-mobile').value.trim();
+  const dept=document.getElementById('cu-dept').value;
+  const qual=document.getElementById('cu-qual').value.trim();
+  const pw=document.getElementById('cu-pw').value;
+  const adminPw=document.getElementById('cu-admin-pw').value;
+  if(!name||!username||!pw||!adminPw){ errEl.textContent='Name, username, password and your admin password are required.'; errEl.style.display='block'; return; }
+  if(pw.length<8){ errEl.textContent='Password must be at least 8 characters.'; errEl.style.display='block'; return; }
+  if(!window._currentUser){ errEl.textContent='You are not logged in.'; errEl.style.display='block'; return; }
+  try{
+    const newUser = await api('POST','/api/accounts',{
+      id:'u'+Date.now(), name, role, username, email, mobile, dept, qual,
+      pw, adminEmail:window._currentUser.username||window._currentUser.email, adminPw,
+      createdAt:new Date().toISOString()
+    });
+    // Auto-sync to staff list
+    if(role==='doctor'||role==='nurse'||role==='staff'||role==='pharmacist'){
+      const staffData={id:'stf'+Date.now(),name,role:role==='pharmacist'?'staff':role,dept,qual,contact:mobile};
+      try{
+        await api('POST','/api/staff',staffData);
+        const idx=window._staff.findIndex(s=>s.id===staffData.id);
+        if(idx>-1) window._staff[idx]=staffData; else window._staff.push(staffData);
+        renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
+      }catch(se){ console.warn('Staff sync failed:',se.message); }
+    }
+    closeCreateUser();
+    loadUsers();
+    alert('User "'+name+'" created successfully.');
+  }catch(e){ errEl.textContent=e.message; errEl.style.display='block'; }
+};
+async function loadUsers(){
+  if(!window._currentUser||window._currentUser.role!=='admin') return;
+  const tbody=document.getElementById('users-tbody');
+  if(!tbody) return;
+  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">Loading…</td></tr>';
+  try{
+    const adminEmail=encodeURIComponent(window._currentUser.username||window._currentUser.email||'');
+    const adminPw=encodeURIComponent(window._currentUser._adminPw||'');
+    const res=await fetch('/api/accounts?adminEmail='+adminEmail+'&adminPw='+adminPw);
+    const json=await res.json();
+    if(!json.ok) throw new Error(json.error);
+    if(!json.data.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">No users yet.</td></tr>'; return; }
+    tbody.innerHTML=json.data.map(u=>`<tr>
+      <td><b>${u.name||'—'}</b></td>
+      <td><span class="badge">${u.role||'—'}</span></td>
+      <td style="font-family:monospace;font-size:13px">${u.username||'—'}</td>
+      <td style="font-size:12px;color:var(--text-2)">${u.email||'—'}</td>
+      <td>${u.dept||'—'}</td>
+      <td style="font-size:12px;color:var(--text-2)">${u.qual||'—'}</td>
+      <td style="font-size:12px;color:var(--text-2)">${u.created_at?new Date(u.created_at).toLocaleDateString():'—'}</td>
+    </tr>`).join('');
+  }catch(e){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:#dc2626">'+e.message+'</td></tr>'; }
+}
+
+// Enter key triggers login
+document.addEventListener('keydown', function(e){
+  const loginPage = document.getElementById('page-login');
+  if (e.key === 'Enter' && loginPage && loginPage.classList.contains('active')) { window.doLogin(); }
+});
+
+window.doLogin=async function(){
+  const email=document.getElementById('login-email').value.trim();
+  const pw=document.getElementById('login-pw').value;
+  showAuthMsg('login-error','login-success','','');
+  if(!email||!pw){ showAuthMsg('login-error','login-success','Please enter username and password.',true); return; }
+  try{
+    const user=await api('POST','/api/accounts/login',{email,pw});
+    window._currentUser={...user}; saveStoredUser(window._currentUser);
+    updateAuthUI();
+    showAuthMsg('login-error','login-success','✓ Welcome back, '+user.name.split(' ')[0]+'!',false);
+    setTimeout(()=>showPage('dashboard'),900);
+  }catch(e){ showAuthMsg('login-error','login-success',e.message,true); }
+};
+
+window.doChangePassword=async function(){
+  showAuthMsg('chpw-error','chpw-success','','');
+  if(!window._currentUser){ showPage('login'); return; }
+  const oldPw=document.getElementById('chpw-old').value;
+  const newPw=document.getElementById('chpw-new').value;
+  const confirm=document.getElementById('chpw-confirm').value;
+  if(newPw.length<8){ showAuthMsg('chpw-error','chpw-success','New password must be at least 8 characters.',true); return; }
+  if(newPw!==confirm){ showAuthMsg('chpw-error','chpw-success','Passwords do not match.',true); return; }
+  try{
+    await api('PUT','/api/accounts/'+window._currentUser.id+'/password',{oldPw,newPw});
+    // No pw stored in session (password is hashed server-side)
+    showAuthMsg('chpw-error','chpw-success','✓ Password updated successfully!',false);
+    ['chpw-old','chpw-new','chpw-confirm'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});
+  }catch(e){ showAuthMsg('chpw-error','chpw-success',e.message,true); }
+};
+
+function resetLoginForm(){
+  const emailEl=document.getElementById('login-email');
+  const pwEl=document.getElementById('login-pw');
+  if(emailEl) emailEl.value='';
+  if(pwEl) pwEl.value='';
+  showAuthMsg('login-error','login-success','','');
+}
+window.logoutUser=function(){
+  window._currentUser=null; clearStoredUser(); updateAuthUI();
+  resetLoginForm();
+  showPage('login');
+};
+
+// ── BOOT ───────────────────────────────────────────────────────────
+// Banner already hidden in HTML (Railway PostgreSQL)
+
+// Restore logged-in user session
+window._currentUser=loadStoredUser();
+updateAuthUI();
+
+// Load all data from PostgreSQL
+loadAll();
