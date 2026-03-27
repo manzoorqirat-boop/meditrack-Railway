@@ -75,7 +75,7 @@ async function loadAll(){
   try{
     const [patients,vitals,wards,staff,appts] = await Promise.all([
       api('GET','/api/patients'),
-      api('GET','/api/vitals'),
+      api('GET','/api/vitals?limit=200'),
       api('GET','/api/wards'),
       api('GET','/api/staff'),
       api('GET','/api/appointments'),
