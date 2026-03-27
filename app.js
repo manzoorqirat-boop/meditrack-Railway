@@ -46,7 +46,6 @@ window.showPage=function(id){
   else if(id==='appointments')     { stopVitalsClock(); renderAppointments(); }
   else if(id==='book-appointment') { stopVitalsClock(); initBookAppt(); }
   else if(id==='change-password')  { stopVitalsClock(); renderChangePassword(); }
-  else if(id==='signup')           { stopVitalsClock(); resetSignupForm(); }
   else if(id==='login')            { stopVitalsClock(); resetLoginForm(); }
 };
 
