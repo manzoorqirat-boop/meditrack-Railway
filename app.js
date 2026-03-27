@@ -814,8 +814,6 @@ function resetLoginForm(){
   if(pwEl) pwEl.value='';
   showAuthMsg('login-error','login-success','','');
 }
-  showAuthMsg('login-error','login-success','','');
-}
 window.logoutUser=function(){
   window._currentUser=null; clearStoredUser(); updateAuthUI();
   resetLoginForm();
