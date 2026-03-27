@@ -1,6 +1,7 @@
 const express = require('express');
 const path    = require('path');
 const { Pool } = require('pg');
+const bcrypt  = require('bcryptjs');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -144,28 +145,43 @@ app.delete('/api/appointments/:id', async (req, res) => {
 app.post('/api/accounts', async (req, res) => {
   const d = req.body;
   try {
+    if (!d.pw || d.pw.length < 8) return res.status(400).json({ ok:false, error:'Password must be at least 8 characters.' });
     const exists = await pool.query('SELECT 1 FROM accounts WHERE email=$1',[d.email]);
     if (exists.rowCount > 0) return res.status(409).json({ ok:false, error:'An account with this email already exists.' });
+    const hashedPw = await bcrypt.hash(d.pw, 10);
     await pool.query(`INSERT INTO accounts VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [d.id,d.name,d.role,d.email,d.mobile||'',d.dept||'',d.empId||'',d.pw,d.createdAt||new Date().toISOString()]);
-    ok(res, d);
+      [d.id,d.name,d.role,d.email,d.mobile||'',d.dept||'',d.empId||'',hashedPw,d.createdAt||new Date().toISOString()]);
+    const { pw: _, ...safeUser } = d;
+    ok(res, safeUser);
   } catch(e) { err(res,e); }
 });
 app.post('/api/accounts/login', async (req, res) => {
   const { email, pw } = req.body;
   try {
-    const r = await pool.query('SELECT * FROM accounts WHERE email=$1 AND pw=$2',[email,pw]);
-    if (r.rowCount === 0) return res.status(401).json({ ok:false, error:'Incorrect email or password.' });
-    ok(res, r.rows[0]);
+    if (!email || !pw) return res.status(400).json({ ok:false, error:'Email and password are required.' });
+    const r = await pool.query('SELECT * FROM accounts WHERE email=$1',[email]);
+    if (r.rowCount === 0) {
+      // Dummy compare to prevent timing attacks (like ERES pattern)
+      await bcrypt.compare(pw, '$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012345');
+      return res.status(401).json({ ok:false, error:'Incorrect email or password.' });
+    }
+    const user = r.rows[0];
+    const valid = await bcrypt.compare(pw, user.pw);
+    if (!valid) return res.status(401).json({ ok:false, error:'Incorrect email or password.' });
+    const { pw: _, ...safeUser } = user;
+    ok(res, safeUser);
   } catch(e) { err(res,e); }
 });
 app.put('/api/accounts/:id/password', async (req, res) => {
   const { oldPw, newPw } = req.body;
   try {
+    if (!newPw || newPw.length < 8) return res.status(400).json({ ok:false, error:'New password must be at least 8 characters.' });
     const r = await pool.query('SELECT pw FROM accounts WHERE id=$1',[req.params.id]);
-    if (!r.rowCount || r.rows[0].pw !== oldPw)
-      return res.status(401).json({ ok:false, error:'Current password is incorrect.' });
-    await pool.query('UPDATE accounts SET pw=$1 WHERE id=$2',[newPw,req.params.id]);
+    if (!r.rowCount) return res.status(404).json({ ok:false, error:'Account not found.' });
+    const valid = await bcrypt.compare(oldPw, r.rows[0].pw);
+    if (!valid) return res.status(401).json({ ok:false, error:'Current password is incorrect.' });
+    const hashedNew = await bcrypt.hash(newPw, 10);
+    await pool.query('UPDATE accounts SET pw=$1 WHERE id=$2',[hashedNew,req.params.id]);
     ok(res, {});
   } catch(e) { err(res,e); }
 });
