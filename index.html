@@ -672,6 +672,7 @@
         <div class="nav-divider"></div>
         <button class="nav-btn" data-page="appointments" onclick="showPage('appointments')">Appointments</button>
         <span id="nav-loggedin" style="display:none">
+          <button class="nav-btn" data-page="users" id="nav-users-btn" onclick="showPage('users')" style="display:none">👥 Users</button>
           <div class="user-pill" onclick="showPage('change-password')">
             <div class="user-av" id="user-av-top">?</div>
             <span class="user-name" id="user-name-top">User</span>
@@ -715,15 +716,14 @@
       <div style="height:.5px;background:var(--bdr-2);margin:8px 0;"></div>
       <div class="drawer-section">Account</div>
       <div id="drawer-loggedout">
-        <button class="drawer-btn" data-page="signup"  onclick="showPage('signup');closeDrawer()"><span class="d-icon">🧑‍💼</span> Sign Up</button>
         <button class="drawer-btn" data-page="login"   onclick="showPage('login');closeDrawer()"><span class="d-icon">🔑</span> Login</button>
-        <button class="drawer-btn" data-page="forgot-password" onclick="showPage('forgot-password');closeDrawer()"><span class="d-icon">🔒</span> Forgot Password</button>
       </div>
       <div id="drawer-loggedin" style="display:none">
         <div style="padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:10px">
           <div class="user-av" id="user-av-drawer">?</div>
           <div><div style="font-weight:500" id="user-name-drawer">User</div><div style="font-size:11px;color:var(--text-2)" id="user-role-drawer"></div></div>
         </div>
+        <button class="drawer-btn" id="drawer-users-btn" data-page="users" onclick="showPage('users');closeDrawer()" style="display:none"><span class="d-icon">👥</span> Manage Users</button>
         <button class="drawer-btn" data-page="change-password" onclick="showPage('change-password');closeDrawer()"><span class="d-icon">🔐</span> Change Password</button>
         <button class="drawer-btn" onclick="logoutUser();closeDrawer()" style="color:#dc2626"><span class="d-icon">🚪</span> Logout</button>
       </div>
@@ -978,90 +978,80 @@
           </div>
           <button class="btn primary" style="width:100%" onclick="doLogin()">Login →</button>
           <div class="auth-footer">
-            <a onclick="showPage('forgot-password')">Forgot password?</a> &nbsp;·&nbsp;
-            New here? <a onclick="showPage('signup')">Create account</a>
+            <a onclick="showPage('forgot-password')">Forgot password?</a>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- SIGNUP -->
-    <div class="page" id="page-signup">
-      <div class="auth-wrap" style="max-width:540px">
-        <div class="auth-card">
-          <div class="auth-title">Create Account</div>
-          <div class="auth-sub">Register a new staff / patient account</div>
-          <div class="stepper" id="signup-stepper">
-            <div class="step-item active" id="step-item-1"><div class="step-circle">1</div><div class="step-label">Basic</div></div>
-            <div class="step-item" id="step-item-2"><div class="step-circle">2</div><div class="step-label">Security</div></div>
-            <div class="step-item" id="step-item-3"><div class="step-circle">3</div><div class="step-label">Done</div></div>
-          </div>
-          <div class="auth-error" id="signup-error"></div>
+    <!-- USERS (Admin only) -->
+    <div class="page" id="page-users">
+      <div class="page-header">
+        <div class="page-title">👥 User Management</div>
+        <button class="btn primary" onclick="openCreateUser()">+ Add User</button>
+      </div>
 
-          <div class="step-panel active" id="signup-step-1">
-            <div style="font-size:14px;font-weight:600;margin-bottom:16px">Basic Information</div>
-            <div class="form-grid">
-              <div class="form-group"><label>Full Name *</label><input id="su-name" placeholder="e.g. Dr. Aisha Khan"></div>
-              <div class="form-group"><label>Role *</label>
-                <select id="su-role">
-                  <option value="">— select role —</option>
-                  <option value="doctor">Doctor</option><option value="nurse">Nurse</option>
-                  <option value="staff">Other Staff</option><option value="patient">Patient</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div class="form-group"><label>Email Address *</label><input id="su-email" type="email" placeholder="name@hospital.com"></div>
-              <div class="form-group"><label>Mobile Number *</label><input id="su-mobile" type="tel" placeholder="+91 98765 43210"></div>
-              <div class="form-group"><label>Department</label>
-                <select id="su-dept">
-                  <option value="">— select —</option>
-                  <option>General Medicine</option><option>Cardiology</option><option>Orthopedics</option>
-                  <option>Pediatrics</option><option>ICU</option><option>Emergency</option>
-                  <option>Nursing</option><option>Administration</option><option>Pharmacy</option>
-                </select>
-              </div>
-              <div class="form-group"><label>Employee / Patient ID</label><input id="su-empid" placeholder="e.g. EMP-2024-001"></div>
-            </div>
-            <button class="btn primary" style="margin-top:20px;width:100%" onclick="signupStep1Next()">Continue →</button>
-            <div class="auth-footer">Already have an account? <a onclick="showPage('login')">Login</a></div>
+      <!-- Create User Card (hidden by default) -->
+      <div id="create-user-card" style="display:none;background:var(--surface);border:1px solid var(--bdr-2);border-radius:var(--r-lg);padding:24px;margin-bottom:24px;">
+        <div style="font-size:15px;font-weight:600;margin-bottom:18px;color:var(--t1)">Create New User</div>
+        <div class="auth-error" id="cu-error" style="display:none;margin-bottom:14px"></div>
+        <div class="form-grid">
+          <div class="form-group"><label>Full Name *</label><input id="cu-name" placeholder="e.g. Dr. Aisha Khan"></div>
+          <div class="form-group"><label>Role *</label>
+            <select id="cu-role">
+              <option value="doctor">Doctor</option>
+              <option value="nurse">Nurse</option>
+              <option value="staff">Other Staff</option>
+              <option value="receptionist">Receptionist</option>
+              <option value="pharmacist">Pharmacist</option>
+              <option value="admin">Admin</option>
+            </select>
           </div>
-
-          <div class="step-panel" id="signup-step-2">
-            <div style="font-size:14px;font-weight:600;margin-bottom:16px">Set Password</div>
-            <div class="form-group" style="margin-bottom:14px">
-              <label>Password *</label>
-              <div class="input-password-wrap">
-                <input id="su-pw" type="password" placeholder="Min 8 characters" oninput="checkStrength(this.value,'strength-fill','strength-label')">
-                <button class="toggle-pw" onclick="togglePw('su-pw',this)" type="button">👁</button>
-              </div>
-              <div class="strength-bar"><div class="strength-fill" id="strength-fill" style="width:0%"></div></div>
-              <div class="hint" id="strength-label">Enter a password</div>
-            </div>
-            <div class="form-group" style="margin-bottom:20px">
-              <label>Confirm Password *</label>
-              <div class="input-password-wrap">
-                <input id="su-pw2" type="password" placeholder="Re-enter password">
-                <button class="toggle-pw" onclick="togglePw('su-pw2',this)" type="button">👁</button>
-              </div>
-            </div>
-            <div style="display:flex;gap:10px">
-              <button class="btn" onclick="signupGoStep(1)">← Back</button>
-              <button class="btn primary" style="flex:1" onclick="signupStep2Next()">Create Account →</button>
-            </div>
+          <div class="form-group"><label>Email Address *</label><input id="cu-email" type="email" placeholder="name@hospital.com"></div>
+          <div class="form-group"><label>Mobile</label><input id="cu-mobile" type="tel" placeholder="+91 98765 43210"></div>
+          <div class="form-group"><label>Department</label>
+            <select id="cu-dept">
+              <option value="">— select —</option>
+              <option>General Medicine</option><option>Cardiology</option><option>Orthopedics</option>
+              <option>Pediatrics</option><option>ICU</option><option>Emergency</option>
+              <option>Nursing</option><option>Administration</option><option>Pharmacy</option>
+            </select>
           </div>
-
-          <div class="step-panel" id="signup-step-3">
-            <div style="text-align:center;padding:20px 0">
-              <div style="font-size:48px;margin-bottom:16px">✅</div>
-              <div style="font-size:18px;font-weight:600;margin-bottom:8px">Account Created!</div>
-              <div style="font-size:13px;color:var(--text-2);margin-bottom:24px">Welcome to MediTrack, <span id="su-done-name">there</span>. Your account has been created successfully.</div>
-              <button class="btn primary" style="width:100%" onclick="showPage('dashboard')">Go to Dashboard →</button>
-              <div style="margin-top:10px"><button class="btn" style="width:100%" onclick="showPage('login')">Login instead</button></div>
+          <div class="form-group"><label>Employee ID</label><input id="cu-empid" placeholder="e.g. EMP-2024-001"></div>
+          <div class="form-group"><label>Temporary Password *</label>
+            <div class="input-password-wrap">
+              <input id="cu-pw" type="password" placeholder="Min 8 characters" oninput="checkStrength(this.value,'cu-strength-fill','cu-strength-label')">
+              <button class="toggle-pw" onclick="togglePw('cu-pw',this)" type="button">👁</button>
+            </div>
+            <div class="strength-bar"><div class="strength-fill" id="cu-strength-fill" style="width:0%"></div></div>
+            <div class="hint" id="cu-strength-label">Enter a password</div>
+          </div>
+          <div class="form-group"><label>Your Admin Password *</label>
+            <div class="input-password-wrap">
+              <input id="cu-admin-pw" type="password" placeholder="Your current password (to confirm)">
+              <button class="toggle-pw" onclick="togglePw('cu-admin-pw',this)" type="button">👁</button>
             </div>
           </div>
         </div>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <button class="btn" onclick="closeCreateUser()">Cancel</button>
+          <button class="btn primary" onclick="submitCreateUser()">Create User →</button>
+        </div>
+      </div>
+
+      <!-- Users Table -->
+      <div class="card" style="overflow-x:auto">
+        <table class="data-table" id="users-table">
+          <thead><tr>
+            <th>Name</th><th>Role</th><th>Email</th><th>Department</th><th>Employee ID</th><th>Created</th>
+          </tr></thead>
+          <tbody id="users-tbody">
+            <tr><td colspan="6" style="text-align:center;color:var(--text-2);padding:32px">Loading users…</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
+
 
     <!-- FORGOT PASSWORD -->
     <div class="page" id="page-forgot-password">
@@ -1261,6 +1251,7 @@ function hideLoading(){ document.getElementById('loading-overlay').classList.add
 
 // ── NAVIGATION ─────────────────────────────────────────────────────
 window.showPage=function(id){
+  if(id==='users') loadUsers();
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const pg=document.getElementById('page-'+id);
   if(pg) pg.classList.add('active');
@@ -1850,10 +1841,19 @@ window._currentUser=null;
 function updateAuthUI(){
   const u=window._currentUser;
   const loggedIn=!!u;
+  const isAdmin=loggedIn&&u.role==='admin';
   document.getElementById('nav-loggedin').style.display=loggedIn?'inline-flex':'none';
   document.getElementById('nav-loggedout').style.display=loggedIn?'none':'inline-flex';
   document.getElementById('drawer-loggedin').style.display=loggedIn?'block':'none';
   document.getElementById('drawer-loggedout').style.display=loggedIn?'none':'block';
+  // Show Users nav only for admin
+  const navUsersBtn=document.getElementById('nav-users-btn');
+  if(navUsersBtn) navUsersBtn.style.display=isAdmin?'inline-flex':'none';
+  const drawerUsersBtn=document.getElementById('drawer-users-btn');
+  if(drawerUsersBtn) drawerUsersBtn.style.display=isAdmin?'flex':'none';
+  // Bottom nav account btn
+  const bnavAcc=document.getElementById('bnav-account');
+  if(bnavAcc){ bnavAcc.innerHTML=loggedIn?'<span class="b-icon">👤</span>Account':'<span class="b-icon">🔑</span>Login'; }
   if(loggedIn){
     const av=ini(u.name);
     document.getElementById('user-av-top').textContent=av;
@@ -1861,6 +1861,7 @@ function updateAuthUI(){
     document.getElementById('user-av-drawer').textContent=av;
     document.getElementById('user-name-drawer').textContent=u.name;
     document.getElementById('user-role-drawer').textContent=u.role||'';
+    if(isAdmin) loadUsers();
   }
 }
 
@@ -1896,46 +1897,64 @@ window.checkStrength=function(pw,fillId,labelId){
   fill.style.width=(score*25)+'%'; fill.style.background=clr; label.textContent=lbl;
 };
 
-// Signup flow
-window.signupGoStep=function(n){
-  [1,2,3].forEach(i=>{
-    document.getElementById('signup-step-'+i).classList.toggle('active',i===n);
-    const item=document.getElementById('step-item-'+i);
-    item.classList.remove('active','done');
-    if(i<n) item.classList.add('done');
-    else if(i===n) item.classList.add('active');
+// ── USER MANAGEMENT (admin only) ───────────────────────────────────
+window.openCreateUser=function(){
+  document.getElementById('create-user-card').style.display='block';
+  document.getElementById('cu-error').style.display='none';
+};
+window.closeCreateUser=function(){
+  document.getElementById('create-user-card').style.display='none';
+  ['cu-name','cu-email','cu-mobile','cu-empid','cu-pw','cu-admin-pw'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
   });
 };
-
-window.signupStep1Next=function(){
-  const name=document.getElementById('su-name').value.trim();
-  const role=document.getElementById('su-role').value;
-  const email=document.getElementById('su-email').value.trim();
-  const mobile=document.getElementById('su-mobile').value.trim();
-  const err=document.getElementById('signup-error');
-  err.style.display='none';
-  if(!name||!role||!email||!mobile){ err.textContent='Please fill in all required fields.'; err.style.display='block'; return; }
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ err.textContent='Please enter a valid email address.'; err.style.display='block'; return; }
-  signupGoStep(2);
-};
-
-window.signupStep2Next=async function(){
-  const pw=document.getElementById('su-pw').value;
-  const pw2=document.getElementById('su-pw2').value;
-  const err=document.getElementById('signup-error');
-  err.style.display='none';
-  if(pw.length<8){ err.textContent='Password must be at least 8 characters.'; err.style.display='block'; return; }
-  if(pw!==pw2){ err.textContent='Passwords do not match.'; err.style.display='block'; return; }
-  const newUser={id:'u'+Date.now(),name:document.getElementById('su-name').value.trim(),role:document.getElementById('su-role').value,email:document.getElementById('su-email').value.trim(),mobile:document.getElementById('su-mobile').value.trim(),dept:document.getElementById('su-dept').value,empId:document.getElementById('su-empid').value.trim(),pw,createdAt:new Date().toISOString()};
+window.submitCreateUser=async function(){
+  const errEl=document.getElementById('cu-error');
+  errEl.style.display='none';
+  const name=document.getElementById('cu-name').value.trim();
+  const email=document.getElementById('cu-email').value.trim();
+  const role=document.getElementById('cu-role').value;
+  const mobile=document.getElementById('cu-mobile').value.trim();
+  const dept=document.getElementById('cu-dept').value;
+  const empId=document.getElementById('cu-empid').value.trim();
+  const pw=document.getElementById('cu-pw').value;
+  const adminPw=document.getElementById('cu-admin-pw').value;
+  if(!name||!email||!pw||!adminPw){ errEl.textContent='Name, email, password and your admin password are required.'; errEl.style.display='block'; return; }
+  if(pw.length<8){ errEl.textContent='Password must be at least 8 characters.'; errEl.style.display='block'; return; }
+  if(!window._currentUser){ errEl.textContent='You are not logged in.'; errEl.style.display='block'; return; }
   try{
-    const created=await api('POST','/api/accounts',newUser);
-    // Store user without pw (server returns safeUser with pw stripped)
-    window._currentUser={...created}; saveStoredUser(window._currentUser);
-    updateAuthUI();
-    document.getElementById('su-done-name').textContent=newUser.name.split(' ')[0]||'there';
-    signupGoStep(3);
-  }catch(e){ err.textContent=e.message; err.style.display='block'; }
+    await api('POST','/api/accounts',{
+      id:'u'+Date.now(), name, role, email, mobile, dept, empId,
+      pw, adminEmail:window._currentUser.email, adminPw,
+      createdAt:new Date().toISOString()
+    });
+    closeCreateUser();
+    loadUsers();
+    alert('User "'+name+'" created successfully.');
+  }catch(e){ errEl.textContent=e.message; errEl.style.display='block'; }
 };
+async function loadUsers(){
+  if(!window._currentUser||window._currentUser.role!=='admin') return;
+  const tbody=document.getElementById('users-tbody');
+  if(!tbody) return;
+  tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-2)">Loading…</td></tr>';
+  try{
+    const adminEmail=encodeURIComponent(window._currentUser.email);
+    const adminPw=encodeURIComponent(window._currentUser._adminPw||'');
+    const res=await fetch('/api/accounts?adminEmail='+adminEmail+'&adminPw='+adminPw);
+    const json=await res.json();
+    if(!json.ok) throw new Error(json.error);
+    if(!json.data.length){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-2)">No users yet.</td></tr>'; return; }
+    tbody.innerHTML=json.data.map(u=>`<tr>
+      <td><b>${u.name||'—'}</b></td>
+      <td><span class="badge">${u.role||'—'}</span></td>
+      <td>${u.email||'—'}</td>
+      <td>${u.dept||'—'}</td>
+      <td style="font-size:12px;color:var(--text-2)">${u.emp_id||'—'}</td>
+      <td style="font-size:12px;color:var(--text-2)">${u.created_at?new Date(u.created_at).toLocaleDateString():'—'}</td>
+    </tr>`).join('');
+  }catch(e){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:#dc2626">'+e.message+'</td></tr>'; }
+}
 
 // Enter key triggers login
 document.addEventListener('keydown', function(e){
