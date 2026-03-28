@@ -17,7 +17,6 @@
 <body>
 <div class="app">
 
-  <!-- SETUP BANNER removed - using Railway PostgreSQL -->
   <div id="setup-banner" style="display:none"></div>
 
   <!-- TOPBAR -->
@@ -29,7 +28,7 @@
     <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
       <span id="sync-label"><span class="sync-dot" id="sync-dot"></span><span id="sync-text">Not connected</span></span>
       <div class="nav">
-        <button class="nav-btn active" data-page="dashboard" onclick="showPage('dashboard')">Dashboard</button>
+        <button class="nav-btn" data-page="dashboard" onclick="showPage('dashboard')">Dashboard</button>
         <button class="nav-btn" data-page="patients"  onclick="showPage('patients')">Patients</button>
         <button class="nav-btn" data-page="vitals"    onclick="showPage('vitals')">Vitals Log</button>
         <button class="nav-btn" data-page="wards"     onclick="showPage('wards')">Wards</button>
@@ -38,7 +37,7 @@
         <div class="nav-divider"></div>
         <button class="nav-btn" data-page="appointments" onclick="showPage('appointments')">Appointments</button>
         <span id="nav-loggedin" style="display:none">
-                    <button class="nav-btn" data-page="users" id="nav-users-btn" onclick="showPage('users')" style="display:none">👥 Users</button>
+          <button class="nav-btn" data-page="users" id="nav-users-btn" onclick="showPage('users')" style="display:none">👥 Users</button>
           <button class="nav-btn" data-page="audit" id="nav-audit-btn" onclick="showPage('audit')" style="display:none">🔍 Audit</button>
           <div class="user-pill" onclick="showPage('change-password')">
             <div class="user-av" id="user-av-top">?</div>
@@ -50,7 +49,7 @@
         </span>
       </div>
     </div>
-        <button id="theme-toggle" onclick="toggleTheme()"
+    <button id="theme-toggle" onclick="toggleTheme()"
       style="background:none;border:1px solid var(--b1);border-radius:var(--r-md);padding:6px 10px;cursor:pointer;font-size:14px;color:var(--t2);transition:all .2s"
       title="Toggle dark mode">🌙</button>
     <button class="hamburger" onclick="openDrawer()" aria-label="Menu">
@@ -73,34 +72,34 @@
       <button class="drawer-close" onclick="closeDrawer()">&#x2715;</button>
     </div>
     <div class="drawer-nav">
-      <button class="drawer-btn active" data-page="dashboard" onclick="showPage('dashboard');closeDrawer()"><span class="d-icon">🏠</span> Dashboard</button>
+      <button class="drawer-btn" data-page="dashboard" onclick="showPage('dashboard');closeDrawer()"><span class="d-icon">🏠</span> Dashboard</button>
       <button class="drawer-btn" data-page="patients"  onclick="showPage('patients');closeDrawer()"><span class="d-icon">👤</span> Patients</button>
       <button class="drawer-btn" data-page="vitals"    onclick="showPage('vitals');closeDrawer()"><span class="d-icon">💓</span> Vitals Log</button>
       <button class="drawer-btn" data-page="wards"     onclick="showPage('wards');closeDrawer()"><span class="d-icon">🏥</span> Wards</button>
       <button class="drawer-btn" data-page="staff"     onclick="showPage('staff');closeDrawer()"><span class="d-icon">👨‍⚕️</span> Staff</button>
       <button class="drawer-btn" data-page="history"   onclick="showPage('history');closeDrawer()"><span class="d-icon">📋</span> History</button>
-      <div style="height:.5px;background:var(--bdr-2);margin:8px 0;"></div>
+      <div style="height:.5px;background:var(--b2);margin:8px 0;"></div>
       <div class="drawer-section">Hospital</div>
       <button class="drawer-btn" data-page="appointments" onclick="showPage('appointments');closeDrawer()"><span class="d-icon">📅</span> Appointments</button>
       <button class="drawer-btn" data-page="book-appointment" onclick="showPage('book-appointment');closeDrawer()"><span class="d-icon">➕</span> Book Appointment</button>
-      <div style="height:.5px;background:var(--bdr-2);margin:8px 0;"></div>
+      <div style="height:.5px;background:var(--b2);margin:8px 0;"></div>
       <div class="drawer-section">Account</div>
       <div id="drawer-loggedout">
-        <button class="drawer-btn" data-page="login"   onclick="showPage('login');closeDrawer()"><span class="d-icon">🔑</span> Login</button>
+        <button class="drawer-btn" data-page="login" onclick="showPage('login');closeDrawer()"><span class="d-icon">🔑</span> Login</button>
       </div>
       <div id="drawer-loggedin" style="display:none">
         <div style="padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:10px">
           <div class="user-av" id="user-av-drawer">?</div>
-          <div><div style="font-weight:500" id="user-name-drawer">User</div><div style="font-size:11px;color:var(--text-2)" id="user-role-drawer"></div></div>
+          <div><div style="font-weight:500" id="user-name-drawer">User</div><div style="font-size:11px;color:var(--t2)" id="user-role-drawer"></div></div>
         </div>
-                <button class="drawer-btn" id="drawer-users-btn" data-page="users" onclick="showPage('users');closeDrawer()" style="display:none"><span class="d-icon">👥</span> Manage Users</button>
+        <button class="drawer-btn" id="drawer-users-btn" data-page="users" onclick="showPage('users');closeDrawer()" style="display:none"><span class="d-icon">👥</span> Manage Users</button>
         <button class="drawer-btn" id="drawer-audit-btn" data-page="audit" onclick="showPage('audit');closeDrawer()" style="display:none"><span class="d-icon">🔍</span> Audit Trail</button>
         <button class="drawer-btn" data-page="change-password" onclick="showPage('change-password');closeDrawer()"><span class="d-icon">🔐</span> Change Password</button>
         <button class="drawer-btn" onclick="logoutUser();closeDrawer()" style="color:#dc2626"><span class="d-icon">🚪</span> Logout</button>
       </div>
     </div>
     <div class="drawer-sync">
-      <span style="font-size:12px;color:var(--text-2);display:flex;align-items:center;gap:6px">
+      <span style="font-size:12px;color:var(--t2);display:flex;align-items:center;gap:6px">
         <span class="sync-dot" id="sync-dot-m"></span><span id="sync-text-m">Not connected</span>
       </span>
     </div>
@@ -109,7 +108,7 @@
   <!-- BOTTOM NAV -->
   <nav class="bottom-nav">
     <div class="bottom-nav-inner">
-      <button class="bnav-btn active" data-page="dashboard" onclick="showPage('dashboard')"><span class="b-icon">🏠</span>Home</button>
+      <button class="bnav-btn" data-page="dashboard" onclick="showPage('dashboard')"><span class="b-icon">🏠</span>Home</button>
       <button class="bnav-btn" data-page="patients"  onclick="showPage('patients')"><span class="b-icon">👤</span>Patients</button>
       <button class="bnav-btn" data-page="vitals"    onclick="showPage('vitals')"><span class="b-icon">💓</span>Vitals</button>
       <button class="bnav-btn" data-page="appointments" onclick="showPage('appointments')"><span class="b-icon">📅</span>Appts</button>
@@ -130,10 +129,10 @@
     <div class="page" id="page-dashboard">
       <div class="page-header">
         <div class="page-title">Overview</div>
-        <div style="font-size:12px;color:var(--text-2)" id="dash-time"></div>
+        <div style="font-size:12px;color:var(--t2)" id="dash-time"></div>
       </div>
       <div class="stat-grid">
-        <div class="stat-card" style="--card-accent:var(--p)"><div class="stat-label">Total Patients</div><div class="stat-val" id="stat-total">0</div></div>
+        <div class="stat-card"><div class="stat-label">Total Patients</div><div class="stat-val" id="stat-total">0</div></div>
         <div class="stat-card" style="border-top:3px solid var(--ok)"><div class="stat-label">Admitted Today</div><div class="stat-val ok" id="stat-today">0</div></div>
         <div class="stat-card" style="border-top:3px solid var(--warn)"><div class="stat-label">Needs Attention</div><div class="stat-val warn" id="stat-warn">0</div></div>
         <div class="stat-card" style="border-top:3px solid #5b8dee"><div class="stat-label">Vitals Logged (24h)</div><div class="stat-val" id="stat-logs">0</div></div>
@@ -149,7 +148,7 @@
         <div class="page-title">Patient Registry</div>
         <button class="btn primary" onclick="openAddPatient()">+ Add Patient</button>
       </div>
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
         <div style="position:relative;flex:1;min-width:220px">
           <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--t3)" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="6"/><path d="M15 15l3 3"/></svg>
           <input id="patient-search" type="search" placeholder="Search name, doctor, diagnosis, ward…"
@@ -176,15 +175,15 @@
           </div>
           <div class="form-group"><label>Recorded At</label>
             <div style="display:flex;gap:10px;align-items:center;">
-              <div style="flex:1;background:var(--surface-2,#f3f4f6);border:1px solid var(--bdr-2,#e5e7eb);border-radius:var(--r,8px);padding:10px 14px;font-size:14px;font-weight:500;color:var(--t1,#111);min-width:110px;" id="vitals-date-display">—</div>
-              <div style="flex:1;background:var(--surface-2,#f3f4f6);border:1px solid var(--bdr-2,#e5e7eb);border-radius:var(--r,8px);padding:10px 14px;font-size:14px;font-weight:600;color:var(--primary,#0F6E56);font-family:monospace;min-width:110px;" id="vitals-time-display">—</div>
+              <div style="flex:1;background:var(--surface2);border:1px solid var(--b2);border-radius:var(--r-md);padding:10px 14px;font-size:14px;font-weight:500;color:var(--t1);min-width:110px;" id="vitals-date-display">—</div>
+              <div style="flex:1;background:var(--surface2);border:1px solid var(--b2);border-radius:var(--r-md);padding:10px 14px;font-size:14px;font-weight:600;color:var(--p);font-family:monospace;min-width:110px;" id="vitals-time-display">—</div>
             </div>
             <input type="hidden" id="vitals-time">
           </div>
         </div>
         <div class="divider"></div>
         <div class="section-title">Vital Signs</div>
-                <div class="vitals-grid">
+        <div class="vitals-grid">
           <div class="vital-box">
             <div class="vital-name">Blood Pressure</div>
             <div class="vital-input-wrap">
@@ -245,7 +244,7 @@
           <div class="form-group">
             <label>Pain Level (0–10)</label>
             <input type="range" min="0" max="10" value="0" id="v-pain" oninput="document.getElementById('pain-out').textContent=this.value">
-            <div style="font-size:12px;color:var(--text-2)">Level: <span id="pain-out">0</span>/10</div>
+            <div style="font-size:12px;color:var(--t2)">Level: <span id="pain-out">0</span>/10</div>
           </div>
           <div class="form-group">
             <label>Nurse / Staff</label>
@@ -272,20 +271,12 @@
 
     <!-- STAFF -->
     <div class="page" id="page-staff">
-      <div class="page-header">
-        <div class="page-title">Staff Management</div>
-      </div>
-
-      <div class="staff-section-row">
-        <div class="staff-section-label">🩺 Doctors</div>
-      </div>
+      <div class="page-header"><div class="page-title">Staff Management</div></div>
+      <div class="staff-section-row"><div class="staff-section-label">🩺 Doctors</div></div>
       <div class="staff-grid" id="staff-grid-doctors">
         <div class="staff-empty">No doctors added yet. Add a user with the Doctor role to see them here.</div>
       </div>
-
-      <div class="staff-section-row">
-        <div class="staff-section-label">💊 Nurses &amp; Staff</div>
-      </div>
+      <div class="staff-section-row"><div class="staff-section-label">💊 Nurses &amp; Staff</div></div>
       <div class="staff-grid" id="staff-grid-nurses">
         <div class="staff-empty">No nurses or staff added yet. Add users with Nurse or Staff roles to see them here.</div>
       </div>
@@ -297,8 +288,6 @@
         <div class="page-title">Vitals History Report</div>
         <button class="btn primary" onclick="printReport()" id="print-btn">🖨 Print Report</button>
       </div>
-
-      <!-- Filter bar -->
       <div class="card" style="margin-bottom:18px" id="hist-filter-card">
         <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
           <div class="form-group" style="flex:2;min-width:180px">
@@ -325,8 +314,6 @@
           <button class="btn" onclick="clearHistFilter()" style="align-self:flex-end">Clear</button>
         </div>
       </div>
-
-      <!-- Report output -->
       <div id="history-list"></div>
     </div>
 
@@ -380,7 +367,7 @@
             </select>
           </div>
           <div class="form-group full"><label>Reason / Chief Complaint</label><textarea id="appt-reason" placeholder="Reason for appointment..."></textarea></div>
-          <div class="form-group full"><label>Notes</label><input id="appt-notes" placeholder="Any additional notes or instructions..."></div>
+          <div class="form-group full"><label>Notes</label><input id="appt-notes" placeholder="Any additional notes..."></div>
         </div>
         <div style="display:flex;gap:10px;margin-top:20px">
           <button class="btn primary" onclick="saveAppointment()">Book Appointment</button>
@@ -422,9 +409,7 @@
         <div class="page-title">👥 User Management</div>
         <button class="btn primary" onclick="openCreateUser()">+ Add User</button>
       </div>
-
-      <!-- Create User Card (hidden by default) -->
-      <div id="create-user-card" style="display:none;background:var(--surface);border:1px solid var(--bdr-2);border-radius:var(--r-lg);padding:24px;margin-bottom:24px;">
+      <div id="create-user-card" style="display:none;background:var(--surface);border:1px solid var(--b2);border-radius:var(--r-lg);padding:24px;margin-bottom:24px;">
         <div style="font-size:15px;font-weight:600;margin-bottom:18px;color:var(--t1)">Create New User</div>
         <div class="auth-error" id="cu-error" style="display:none;margin-bottom:14px"></div>
         <div class="form-grid">
@@ -459,46 +444,32 @@
             <div class="strength-bar"><div class="strength-fill" id="cu-strength-fill" style="width:0%"></div></div>
             <div class="hint" id="cu-strength-label">Enter a password</div>
           </div>
-          <div class="form-group"><label>Your Admin Password *</label>
-            <div class="input-password-wrap">
-              <input id="cu-admin-pw" type="password" placeholder="Your current password (to confirm)">
-              <button class="toggle-pw" onclick="togglePw('cu-admin-pw',this)" type="button">👁</button>
-            </div>
-          </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:6px">
           <button class="btn" onclick="closeCreateUser()">Cancel</button>
           <button class="btn primary" onclick="submitCreateUser()">Create User →</button>
         </div>
       </div>
-
-      <!-- Users Table -->
       <div class="card" style="overflow-x:auto">
         <table class="data-table" id="users-table">
           <thead><tr>
             <th>Name</th><th>Role</th><th>Username</th><th>Email</th><th>Department</th><th>Qualification</th><th>Created</th>
           </tr></thead>
           <tbody id="users-tbody">
-            <tr><td colspan="7" style="text-align:center;color:var(--text-2);padding:32px">Loading users…</td></tr>
+            <tr><td colspan="7" style="text-align:center;color:var(--t2);padding:32px">Loading users…</td></tr>
           </tbody>
         </table>
       </div>
     </div>
-
 
     <!-- FORGOT PASSWORD -->
     <div class="page" id="page-forgot-password">
       <div class="auth-wrap">
         <div class="auth-card">
           <div class="auth-title">Forgot Password 🔒</div>
-          <div class="auth-sub">Enter your registered email address to receive reset instructions</div>
+          <div class="auth-sub">Please contact your system administrator to reset your password.</div>
           <div class="auth-error" id="forgot-error"></div>
           <div class="auth-success" id="forgot-success"></div>
-          <div class="form-group" style="margin-bottom:20px">
-            <label>Email Address</label>
-            <input id="forgot-email" type="email" placeholder="name@hospital.com">
-          </div>
-          <button class="btn primary" style="width:100%" onclick="doForgotPassword()">Send Reset Link →</button>
           <div class="auth-footer"><a onclick="showPage('login')">← Back to Login</a></div>
         </div>
       </div>
@@ -540,7 +511,7 @@
           </div>
           <div id="chpw-loggedout-section" style="display:none;text-align:center;padding:20px 0">
             <div style="font-size:32px;margin-bottom:12px">🔒</div>
-            <div style="font-size:14px;color:var(--text-2);margin-bottom:16px">Please log in first to change your password.</div>
+            <div style="font-size:14px;color:var(--t2);margin-bottom:16px">Please log in first to change your password.</div>
             <button class="btn primary" onclick="showPage('login')">Go to Login →</button>
           </div>
           <div class="auth-footer"><a onclick="showPage('dashboard')">← Back to Dashboard</a> &nbsp;·&nbsp; <a onclick="logoutUser()" style="color:#dc2626">Logout</a></div>
@@ -548,7 +519,7 @@
       </div>
     </div>
 
-      <!-- AUDIT TRAIL (admin only) -->
+    <!-- AUDIT TRAIL (admin only) -->
     <div class="page" id="page-audit">
       <div class="page-header">
         <div>
@@ -685,30 +656,17 @@
       <button class="close-btn" onclick="closeModal('modal-staff')">×</button>
     </div>
     <div class="form-grid" style="grid-template-columns:1fr">
-      <div class="form-group">
-        <label>Full Name *</label>
-        <input id="st-name" placeholder="e.g. Dr. Ramesh Kumar / Nurse Priya Singh">
-      </div>
-      <div class="form-group">
-        <label>Role *</label>
+      <div class="form-group"><label>Full Name *</label><input id="st-name" placeholder="e.g. Dr. Ramesh Kumar"></div>
+      <div class="form-group"><label>Role *</label>
         <select id="st-role">
           <option value="doctor">Doctor</option>
           <option value="nurse">Nurse</option>
           <option value="staff">Other Staff</option>
         </select>
       </div>
-      <div class="form-group">
-        <label>Department / Specialisation</label>
-        <input id="st-dept" placeholder="e.g. Cardiology, ICU, OPD, General">
-      </div>
-      <div class="form-group">
-        <label>Qualification</label>
-        <input id="st-qual" placeholder="e.g. MBBS MD, GNM, BSc Nursing">
-      </div>
-      <div class="form-group">
-        <label>Contact Number</label>
-        <input id="st-contact" placeholder="+91 XXXXX XXXXX">
-      </div>
+      <div class="form-group"><label>Department / Specialisation</label><input id="st-dept" placeholder="e.g. Cardiology, ICU"></div>
+      <div class="form-group"><label>Qualification</label><input id="st-qual" placeholder="e.g. MBBS MD, GNM"></div>
+      <div class="form-group"><label>Contact Number</label><input id="st-contact" placeholder="+91 XXXXX XXXXX"></div>
     </div>
     <div style="display:flex;gap:10px;margin-top:20px">
       <button class="btn primary" onclick="saveStaff()">Save</button>
@@ -716,8 +674,6 @@
     </div>
   </div>
 </div>
-
-<!-- Firebase setup modal removed - using Railway PostgreSQL -->
 
 <!-- ═══ MODAL: CONFIRM DELETE ═══ -->
 <div id="confirm-modal" class="modal-backdrop" style="display:none">
