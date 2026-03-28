@@ -451,7 +451,44 @@ window.renderHistory=async function(){
   }
 };
 
-window.printReport=function(){ window.print(); };
+window.printReport=function(){
+  const pid  = document.getElementById('hist-patient').value;
+  const name = pid ? (getPatient(pid)?.name||'Patient') : null;
+  if(!pid){
+    alert('Please select a specific patient from the filter before printing.');
+    return;
+  }
+  // Build printable content
+  const table = document.querySelector('#history-list table');
+  if(!table){ alert('No data to print. Apply a filter first.'); return; }
+  const from = document.getElementById('hist-date-from').value;
+  const to   = document.getElementById('hist-date-to').value;
+  const period = (from||to) ? `Period: ${from||'—'} to ${to||'—'}` : 'All dates';
+  const now  = new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'});
+  const win  = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>Vitals Report — ${name}</title>
+  <style>
+    body{font-family:system-ui,sans-serif;font-size:12px;color:#111;margin:24px}
+    h1{font-size:18px;margin:0 0 4px}
+    .sub{font-size:12px;color:#555;margin-bottom:16px}
+    table{width:100%;border-collapse:collapse}
+    th{background:#f3f4f6;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;border:1px solid #ddd}
+    td{padding:7px 10px;border:1px solid #ddd;font-size:11px}
+    tr:nth-child(even){background:#fafafa}
+    .abn{color:#dc2626;font-weight:600}
+    .footer{margin-top:20px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px}
+    @media print{@page{margin:15mm}}
+  </style></head><body>
+  <h1>MediTrack — Vitals Report</h1>
+  <div class="sub">Patient: <b>${name}</b> &nbsp;·&nbsp; ${period} &nbsp;·&nbsp; Generated: ${now}</div>
+  ${table.outerHTML}
+  <div class="footer">Reference ranges: BP 90–140/60–90 mmHg · Pulse 50–110 bpm · Temp 96–101°F · SpO₂ ≥94% · Glucose 70–180 mg/dL</div>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>win.print(), 400);
+};
+
 
 // ── MODALS ─────────────────────────────────────────────────────────
 window.closeModal=function(id){ document.getElementById(id).classList.remove('open'); };
