@@ -990,8 +990,10 @@ window.deleteAppt=function(id){
 window._currentUser=loadStoredUser();
 updateAuthUI();
 
-if(!localStorage.getItem('meditrack_token')){
-  showPage('login');
-} else {
-  loadAll();
-}
+setTimeout(function(){
+  if(!localStorage.getItem('meditrack_token')){
+    showPage('login');
+  } else {
+    loadAll();
+  }
+}, 0);
