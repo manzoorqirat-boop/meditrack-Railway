@@ -294,7 +294,7 @@ function renderWards(){
     const pct=Math.round(occ/(w.beds||1)*100);
     const cls=pct>=90?'badge-danger':pct>=70?'badge-warn':'badge-ok';
     const bar=pct>=90?'#E24B4A':pct>=70?'#EF9F27':'#1D9E75';
-    return `<div class="ward-card"><div class="ward-type">${w.type}</div><div class="ward-name">${w.name}</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px"><span class="badge ${cls}">${occ}/${w.beds} beds</span><span style="font-size:11px;color:var(--text-2)">${pct}% full</span></div><div style="margin-top:10px;height:4px;background:var(--bg-2);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${bar};border-radius:2px"></div></div></div>`;
+    return `<div class="ward-card"><div class="ward-type">${w.type}</div><div class="ward-name">${w.name}</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px"><span class="badge ${cls}">${occ}/${w.beds} beds</span><span style="font-size:11px;color:var(--t2)">${pct}% full</span></div><div style="margin-top:10px;height:4px;background:var(--b2);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${bar};border-radius:2px"></div></div></div>`;
   }).join('')||'<div class="empty-state">No wards configured.</div>';
 }
 
@@ -314,65 +314,33 @@ window.saveWard=async function(){
 };
 
 // ── STAFF ──────────────────────────────────────────────────────────
+// Staff is view-only — managed through User Management
 function renderStaffPage(){
   const doctors=window._staff.filter(s=>s.role==='doctor');
   const nurses=window._staff.filter(s=>s.role!=='doctor');
+
   function card(s){
     const avcls=s.role==='doctor'?'doctor':s.role==='nurse'?'nurse':'other';
-    const bdg=s.role==='doctor'?'<span class="badge badge-info">Doctor</span>':s.role==='nurse'?'<span class="badge badge-ok">Nurse</span>':'<span class="badge badge-purple">Staff</span>';
+    const bdg=s.role==='doctor'
+      ? '<span class="badge badge-info">Doctor</span>'
+      : s.role==='nurse'
+        ? '<span class="badge badge-ok">Nurse</span>'
+        : '<span class="badge badge-purple">Staff</span>';
     const sub=[s.qual,s.dept].filter(Boolean).join(' · ')||'—';
-    return `<div class="staff-card"><div class="staff-card-top"><div class="staff-av ${avcls}">${ini(s.name)}</div><div><div class="staff-nm">${s.name}</div><div class="staff-sub">${sub}</div></div></div><div class="staff-row2">${bdg}<span class="staff-contact">${s.contact||''}</span></div>
+    return `<div class="staff-card">
+      <div class="staff-card-top">
+        <div class="staff-av ${avcls}">${ini(s.name)}</div>
+        <div><div class="staff-nm">${s.name}</div><div class="staff-sub">${sub}</div></div>
+      </div>
+      <div class="staff-row2">${bdg}<span class="staff-contact">${s.contact||''}</span></div>
+    </div>`;
+  }
+
   const dEl=document.getElementById('staff-grid-doctors');
   const nEl=document.getElementById('staff-grid-nurses');
   if(dEl) dEl.innerHTML=doctors.length?doctors.map(card).join(''):'<div class="staff-empty">No doctors added yet. Add a user with the Doctor role to see them here.</div>';
   if(nEl) nEl.innerHTML=nurses.length?nurses.map(card).join(''):'<div class="staff-empty">No nurses or staff added yet. Add users with Nurse or Staff roles to see them here.</div>';
 }
-
-window.openAddStaff=function(role){
-  window._editingStaffId=null;
-  document.getElementById('modal-staff-title').textContent=role==='doctor'?'Add Doctor':'Add Nurse / Staff';
-  ['st-name','st-dept','st-qual','st-contact'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('st-role').value=role||'nurse';
-  document.getElementById('modal-staff').classList.add('open');
-};
-
-window.openEditStaff=function(id){
-  const s=window._staff.find(x=>x.id===id); if(!s) return;
-  window._editingStaffId=id;
-  document.getElementById('modal-staff-title').textContent='Edit Staff';
-  document.getElementById('st-name').value=s.name||'';
-  document.getElementById('st-role').value=s.role||'nurse';
-  document.getElementById('st-dept').value=s.dept||'';
-  document.getElementById('st-qual').value=s.qual||'';
-  document.getElementById('st-contact').value=s.contact||'';
-  document.getElementById('modal-staff').classList.add('open');
-};
-
-window.saveStaff=async function(){
-  const name=document.getElementById('st-name').value.trim();
-  if(!name){ alert('Name is required.'); return; }
-  const id=window._editingStaffId||('stf'+Date.now());
-  const data={id,name,role:document.getElementById('st-role').value,dept:document.getElementById('st-dept').value.trim(),qual:document.getElementById('st-qual').value.trim(),contact:document.getElementById('st-contact').value.trim()};
-  closeModal('modal-staff');
-  try{
-    await api('POST','/api/staff',data);
-    const idx=window._staff.findIndex(s=>s.id===id);
-    if(idx>-1) window._staff[idx]=data; else window._staff.push(data);
-    renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
-  }catch(e){ alert('Save failed: '+e.message); }
-};
-
-window.removeStaff=function(id,name){
-  confirmDelete({
-    record:name, message:'This staff member will be permanently removed.',
-    requireType:'DELETE',
-    onConfirm:async()=>{
-      await api('DELETE','/api/staff/'+id);
-      window._staff=window._staff.filter(s=>s.id!==id);
-      renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
-    }
-  });
-};
 
 // ── HISTORY / REPORT ───────────────────────────────────────────────
 function populateHistorySelect(){
@@ -449,9 +417,7 @@ window.renderHistory=async function(){
   }
 };
 
-window.printReport=function(){
-  window.print();
-};
+window.printReport=function(){ window.print(); };
 
 // ── MODALS ─────────────────────────────────────────────────────────
 window.closeModal=function(id){ document.getElementById(id).classList.remove('open'); };
@@ -491,13 +457,13 @@ function renderAppointments(filter){
   document.getElementById('appt-stat-today').textContent=todayList.length;
   document.getElementById('appt-stat-upcoming').textContent=upcoming.length;
   document.getElementById('appt-stat-total').textContent=list.length;
-  if(window._apptFilter==='today')      list=todayList;
-  else if(window._apptFilter==='upcoming')   list=upcoming;
-  else if(window._apptFilter==='completed')  list=list.filter(a=>a.status==='completed');
+  if(window._apptFilter==='today')     list=todayList;
+  else if(window._apptFilter==='upcoming')  list=upcoming;
+  else if(window._apptFilter==='completed') list=list.filter(a=>a.status==='completed');
   document.getElementById('appt-list').innerHTML=list.length?list.map(a=>{
     const dLabel=a.date===today?'Today':a.date;
     const sBadge=a.status==='completed'?'<span class="badge badge-ok">Completed</span>':a.date<today?'<span class="badge badge-gray">Past</span>':a.date===today?'<span class="badge badge-warn">Today</span>':'<span class="badge badge-info">Upcoming</span>';
-    return `<div class="appt-row"><div class="appt-info"><div><div class="appt-time">${a.time||'—'}</div><div style="font-size:10px;color:var(--text-2)">${dLabel}</div></div><div class="avatar">${ini(a.patientName)}</div><div><div class="appt-name">${a.patientName}</div><div class="appt-meta">${a.doctor?'Dr. '+a.doctor:'—'} · ${a.dept||'—'}</div><div class="appt-meta">${a.reason||''}</div></div></div><div class="appt-actions">${sBadge}${a.status!=='completed'?`<button class="btn sm" onclick="markApptDone('${a.id}')">Done</button>`:''}<button class="btn sm danger" onclick="deleteAppt('${a.id}')">✕</button></div></div>`;
+    return `<div class="appt-row"><div class="appt-info"><div><div class="appt-time">${a.time||'—'}</div><div style="font-size:10px;color:var(--t2)">${dLabel}</div></div><div class="avatar">${ini(a.patientName)}</div><div><div class="appt-name">${a.patientName}</div><div class="appt-meta">${a.doctor?'Dr. '+a.doctor:'—'} · ${a.dept||'—'}</div><div class="appt-meta">${a.reason||''}</div></div></div><div class="appt-actions">${sBadge}${a.status!=='completed'?`<button class="btn sm" onclick="markApptDone('${a.id}')">Done</button>`:''}<button class="btn sm danger" onclick="deleteAppt('${a.id}')">✕</button></div></div>`;
   }).join(''):'<div class="empty-state">No appointments found.</div>';
 }
 
@@ -620,7 +586,7 @@ window.openCreateUser=function(){
 };
 window.closeCreateUser=function(){
   document.getElementById('create-user-card').style.display='none';
-  ['cu-name','cu-username','cu-email','cu-mobile','cu-qual','cu-pw','cu-admin-pw'].forEach(id=>{
+  ['cu-name','cu-username','cu-email','cu-mobile','cu-qual','cu-pw'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
 };
@@ -643,6 +609,7 @@ window.submitCreateUser=async function(){
       id:'u'+Date.now(), name, role, username, email, mobile, dept, qual,
       pw, createdAt:new Date().toISOString()
     });
+    // Auto-sync to staff list
     if(role==='doctor'||role==='nurse'||role==='staff'||role==='pharmacist'){
       const staffData={id:'stf'+Date.now(),name,role:role==='pharmacist'?'staff':role,dept,qual,contact:mobile};
       try{
@@ -679,14 +646,14 @@ async function loadUsers(){
   const tbody=document.getElementById('users-tbody');
   if(!tbody) return;
   tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--t2)">Loading…</td></tr>';
-  // Sync accounts → staff silently on every users page load
+  // Sync accounts → staff silently
   api('POST','/api/admin/sync-staff').then(r=>{
     if(r&&r.synced>0){ renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect(); }
   }).catch(()=>{});
   try{
     const data=await api('GET','/api/accounts');
-    if(!data||!data.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">No users yet.</td></tr>'; return; }
-            tbody.innerHTML=data.map(u=>{
+    if(!data||!data.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--t2)">No users yet.</td></tr>'; return; }
+    tbody.innerHTML=data.map(u=>{
       const isMe = u.id === window._currentUser?.id;
       const inactive = u.status === 'inactive';
       const statusBadgeHtml = inactive
