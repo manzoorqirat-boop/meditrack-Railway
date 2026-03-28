@@ -658,6 +658,22 @@ window.submitCreateUser=async function(){
   }catch(e){ errEl.textContent=e.message; errEl.style.display='block'; }
 };
 
+window.toggleUserStatus=function(id, newStatus, name){
+  confirmDelete({
+    icon: newStatus==='inactive' ? '🔒' : '✅',
+    title: newStatus==='inactive' ? 'Deactivate user?' : 'Activate user?',
+    record: name,
+    message: newStatus==='inactive'
+      ? 'This user will not be able to log in until reactivated.'
+      : 'This user will be able to log in again.',
+    btnLabel: newStatus==='inactive' ? 'Deactivate' : 'Activate',
+    onConfirm: async () => {
+      await api('PUT', '/api/accounts/'+id+'/status', { status: newStatus });
+      loadUsers();
+    }
+  });
+};
+
 async function loadUsers(){
   if(!window._currentUser||window._currentUser.role!=='admin') return;
   const tbody=document.getElementById('users-tbody');
