@@ -71,6 +71,7 @@ async function api(method, path, body){
 }
 
 async function loadAll(){
+  if(!localStorage.getItem('meditrack_token')){ hideLoading(); showPage('login'); return; }
   setSyncStatus('saving','Loading…'); showLoading('Loading data…');
   try{
     const [patients,vitals,wards,staff,appts] = await Promise.all([
@@ -833,10 +834,11 @@ window.doLogin=async function(){
   showAuthMsg('login-error','login-success','','');
   if(!username||!pw){ showAuthMsg('login-error','login-success','Please enter username and password.',true); return; }
   try{
-    const user=await api('POST','/api/accounts/login',{username,pw});
-    window._currentUser={...user}; saveStoredUser(window._currentUser);
+        const res=await api('POST','/api/accounts/login',{username,pw});
+    localStorage.setItem('meditrack_token', res.token);
+    window._currentUser={...res.user}; saveStoredUser(window._currentUser);
     updateAuthUI();
-    showAuthMsg('login-error','login-success','✓ Welcome back, '+user.name.split(' ')[0]+'!',false);
+    showAuthMsg('login-error','login-success','✓ Welcome back, '+res.user.name.split(' ')[0]+'!',false);
     setTimeout(()=>showPage('dashboard'),900);
   }catch(e){ showAuthMsg('login-error','login-success',e.message,true); }
 };
