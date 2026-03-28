@@ -990,5 +990,8 @@ window.deleteAppt=function(id){
 window._currentUser=loadStoredUser();
 updateAuthUI();
 
-// Load all data from PostgreSQL
-loadAll();
+if(!localStorage.getItem('meditrack_token')){
+  showPage('login');
+} else {
+  loadAll();
+}
