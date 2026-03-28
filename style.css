@@ -109,6 +109,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--t1);font-size:14px
 .btn.sm{padding:5px 13px;font-size:12px;border-radius:var(--r-sm);}
 .btn.danger{color:var(--danger);border-color:#f8c5c5;}
 .btn.danger:hover{background:#fff5f5;border-color:#f8a5a5;}
+.btn.danger:disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
+.btn.danger.filled{background:#fef2f2;color:#b91c1c;border-color:#fca5a5;font-weight:600;}
+.btn.danger.filled:hover{background:#fee2e2;border-color:#f87171;}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
 .form-group{display:flex;flex-direction:column;gap:6px;}
 .form-group.full{grid-column:1/-1;}
@@ -129,6 +132,26 @@ textarea{resize:vertical;min-height:70px;}
 .vital-input{flex:1;}
 .vital-box input{border:none;background:transparent;padding:4px 0;font-size:15px;font-weight:500;}
 .vital-box input:focus{box-shadow:none;border:none;}
+
+/* ── VITALS LIVE RANGE INDICATORS ── */
+.vitals-indicator{font-size:14px;line-height:1;flex-shrink:0;transition:opacity .2s;min-width:16px;text-align:center;}
+.vitals-hint{font-size:10.5px;color:var(--t3);margin-top:5px;line-height:1.4;transition:color .2s;min-height:15px;}
+.vitals-hint.hint-normal  {color:#16a34a;}
+.vitals-hint.hint-warn    {color:#d97706;}
+.vitals-hint.hint-critical{color:#dc2626;font-weight:600;}
+
+.vital-box input.vi-normal  {border:1.5px solid #22c55e!important;border-radius:var(--r-sm);padding:3px 6px;background:rgba(34,197,94,.05)!important;}
+.vital-box input.vi-warn    {border:1.5px solid #f59e0b!important;border-radius:var(--r-sm);padding:3px 6px;background:rgba(245,158,11,.05)!important;}
+.vital-box input.vi-critical{border:1.5px solid #ef4444!important;border-radius:var(--r-sm);padding:3px 6px;background:rgba(239,68,68,.06)!important;animation:criticalPulse 1.5s ease-in-out infinite;}
+
+.vital-box:has(input.vi-normal)  {border-color:#86efac;background:var(--surface);}
+.vital-box:has(input.vi-warn)    {border-color:#fcd34d;background:var(--surface);}
+.vital-box:has(input.vi-critical){border-color:#fca5a5;background:var(--surface);}
+
+@keyframes criticalPulse{
+  0%,100%{box-shadow:none;}
+  50%    {box-shadow:0 0 0 4px rgba(239,68,68,.15);}
+}
 .history-row{display:flex;align-items:start;gap:14px;padding:14px 0;border-bottom:1px solid var(--b2);}
 .history-row:last-child{border-bottom:none;}
 .time-badge{background:var(--surface2);border-radius:var(--r-sm);padding:4px 10px;font-size:11px;color:var(--t2);white-space:nowrap;flex-shrink:0;margin-top:2px;}
@@ -326,4 +349,82 @@ textarea{resize:vertical;min-height:70px;}
   .ward-grid{grid-template-columns:1fr;}
   .staff-grid{grid-template-columns:1fr;}
   .stat-grid{grid-template-columns:1fr 1fr;}
+}
+
+/* ══════════════════════════════════════════════════════
+   DARK MODE
+   Applied via html.dark (manual toggle)
+   + @media (prefers-color-scheme:dark) (OS auto)
+   ══════════════════════════════════════════════════════ */
+html.dark,
+@media(prefers-color-scheme:dark){
+  :root{
+    --p-light :rgba(10,92,71,0.22);
+    --p-glow  :rgba(10,92,71,0.18);
+    --accent-lt:rgba(201,168,76,0.12);
+    --bg      :#0F1410;
+    --surface :#161D18;
+    --surface2:#1E2820;
+    --glass   :rgba(22,29,24,0.88);
+    --t1:#E8EDE9;
+    --t2:#8A9E8E;
+    --t3:#5A6E5E;
+    --b1:#2A3A2E;
+    --b2:#1F2D23;
+  }
+}
+
+html.dark body,
+@media(prefers-color-scheme:dark){ body{color-scheme:dark;} }
+
+html.dark input,
+html.dark select,
+html.dark textarea{background:var(--surface2);color:var(--t1);border-color:var(--b1);}
+@media(prefers-color-scheme:dark){
+  input,select,textarea{background:var(--surface2);color:var(--t1);border-color:var(--b1);}
+}
+
+html.dark .topbar{background:var(--surface);border-bottom-color:var(--b1);}
+html.dark .modal,html.dark .setup-box{background:var(--surface);border-color:var(--b1);}
+html.dark .drawer{background:var(--surface);border-right:1px solid var(--b1);}
+html.dark .drawer-btn:hover{background:var(--surface2);}
+html.dark .bottom-nav{background:var(--surface);border-top-color:var(--b1);}
+html.dark #loading-overlay{background:rgba(15,20,16,0.92);}
+html.dark .card{background:var(--surface);border-color:var(--b1);}
+html.dark .stat-card{background:var(--surface);border-color:var(--b1);}
+html.dark .ward-card{background:var(--surface);border-color:var(--b1);}
+html.dark .staff-card{background:var(--surface);border-color:var(--b1);}
+html.dark .auth-card{background:var(--surface);border-color:var(--b1);}
+html.dark .vital-box{background:var(--surface2);border-color:var(--b1);}
+html.dark .vital-box input{color:var(--t1);}
+
+html.dark .badge-ok    {background:rgba(26,127,90,0.2); color:#6EE7B7;}
+html.dark .badge-warn  {background:rgba(198,124,26,0.2);color:#FCD34D;}
+html.dark .badge-danger{background:rgba(192,57,43,0.2); color:#FCA5A5;}
+html.dark .badge-info  {background:rgba(21,101,192,0.2);color:#93C5FD;}
+html.dark .badge-gray  {background:rgba(90,101,96,0.2); color:var(--t2);}
+
+html.dark .alert-banner{background:rgba(192,57,43,0.12);border-color:rgba(192,57,43,0.3);color:#FC8181;}
+html.dark .v-chip.abnormal{background:rgba(198,124,26,0.15);border-color:rgba(198,124,26,0.3);color:#FCD34D;}
+html.dark .rpt-row-abnormal td{background:rgba(192,57,43,0.08)!important;}
+html.dark .rpt-cell-warn{color:#FCA5A5!important;}
+html.dark .auth-error  {background:rgba(192,57,43,0.15);border-color:rgba(192,57,43,0.3);color:#FCA5A5;}
+html.dark .auth-success{background:rgba(26,127,90,0.15);border-color:rgba(26,127,90,0.3); color:#6EE7B7;}
+
+html.dark #theme-toggle{border-color:var(--b1);}
+
+@media(prefers-color-scheme:dark){
+  .topbar{background:var(--surface);border-bottom-color:var(--b1);}
+  .modal,.setup-box{background:var(--surface);border-color:var(--b1);}
+  .drawer{background:var(--surface);}
+  .bottom-nav{background:var(--surface);border-top-color:var(--b1);}
+  .card,.stat-card,.ward-card,.staff-card,.auth-card{background:var(--surface);border-color:var(--b1);}
+  .vital-box{background:var(--surface2);border-color:var(--b1);}
+  .badge-ok    {background:rgba(26,127,90,0.2); color:#6EE7B7;}
+  .badge-warn  {background:rgba(198,124,26,0.2);color:#FCD34D;}
+  .badge-danger{background:rgba(192,57,43,0.2); color:#FCA5A5;}
+  .badge-info  {background:rgba(21,101,192,0.2);color:#93C5FD;}
+  .badge-gray  {background:rgba(90,101,96,0.2); color:var(--t2);}
+  .alert-banner{background:rgba(192,57,43,0.12);border-color:rgba(192,57,43,0.3);color:#FC8181;}
+  #loading-overlay{background:rgba(15,20,16,0.92);}
 }
