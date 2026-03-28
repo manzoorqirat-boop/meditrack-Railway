@@ -453,8 +453,20 @@
               <button class="toggle-pw" onclick="togglePw('login-pw',this)" type="button">👁</button>
             </div>
           </div>
-          <button class="btn primary" style="width:100%" onclick="doLogin()">Login →</button>
-          <div class="auth-footer"><a onclick="showPage('forgot-password')">Forgot password?</a></div>
+                    <button class="btn primary" style="width:100%" onclick="doLogin()">Login →</button>
+          <div style="display:flex;align-items:center;gap:12px;margin:20px 0">
+            <div style="flex:1;height:1px;background:var(--b2)"></div>
+            <span style="font-size:12px;color:var(--t3)">or</span>
+            <div style="flex:1;height:1px;background:var(--b2)"></div>
+          </div>
+          <button class="btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px" onclick="showPublicBooking()">
+            📅 Book an Appointment
+          </button>
+          <div style="font-size:11px;color:var(--t3);text-align:center;margin-top:8px">No login required to book</div>
+          <div class="auth-footer">
+            <a onclick="showPage('forgot-password')">Forgot password?</a>
+          </div>
+
         </div>
       </div>
     </div>
