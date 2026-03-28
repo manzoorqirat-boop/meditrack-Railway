@@ -1097,3 +1097,8 @@ setTimeout(function(){
     loadAll();
   }
 }, 0);
+
+// Make booking page accessible from URL hash
+if(window.location.hash==='#book'){
+  setTimeout(()=>showPublicBooking(), 50);
+}
