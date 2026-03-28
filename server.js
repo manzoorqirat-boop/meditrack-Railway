@@ -668,6 +668,29 @@ app.get('/api/audit/stats', requireAdmin, async (req, res) => {
   } catch(e) { err(res,e); }
 });
 
+// ── USER STATUS MANAGEMENT (admin only) ──────────────────────────────────────
+app.put('/api/accounts/:id/status', requireAdmin, async (req, res) => {
+  const { status } = req.body; // 'active' or 'inactive'
+  const actor = req.user;
+  try {
+    if (!['active','inactive'].includes(status))
+      return res.status(400).json({ ok:false, error:'Status must be active or inactive.' });
+    // Prevent admin from deactivating their own account
+    if (req.params.id === actor.id)
+      return res.status(403).json({ ok:false, error:'You cannot deactivate your own account.' });
+    const r = await pool.query('SELECT * FROM accounts WHERE id=$1', [req.params.id]);
+    if (!r.rowCount) return res.status(404).json({ ok:false, error:'Account not found.' });
+    const target = r.rows[0];
+    await pool.query('UPDATE accounts SET status=$1 WHERE id=$2', [status, req.params.id]);
+    await audit({ username:actor.username, userRole:actor.role,
+      event: status==='inactive' ? 'USER_DEACTIVATED' : 'USER_ACTIVATED',
+      record: target.username,
+      oldValue: target.status||'active',
+      newValue: status, ip:req.ip });
+    ok(res, { id:req.params.id, status });
+  } catch(e) { err(res,e); }
+});
+
 // ── STAFF SYNC — copies accounts → staff table (run once after migration) ─────
 app.post('/api/admin/sync-staff', requireAdmin, async (req, res) => {
   try {
