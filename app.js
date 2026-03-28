@@ -321,8 +321,7 @@ function renderStaffPage(){
     const avcls=s.role==='doctor'?'doctor':s.role==='nurse'?'nurse':'other';
     const bdg=s.role==='doctor'?'<span class="badge badge-info">Doctor</span>':s.role==='nurse'?'<span class="badge badge-ok">Nurse</span>':'<span class="badge badge-purple">Staff</span>';
     const sub=[s.qual,s.dept].filter(Boolean).join(' · ')||'—';
-    return `<div class="staff-card"><div class="staff-card-top"><div class="staff-av ${avcls}">${ini(s.name)}</div><div><div class="staff-nm">${s.name}</div><div class="staff-sub">${sub}</div></div></div><div class="staff-row2">${bdg}<span class="staff-contact">${s.contact||''}</span></div><div class="staff-acts"><button class="btn sm" onclick="openEditStaff('${s.id}')">Edit</button><button class="btn sm danger" onclick="removeStaff('${s.id}','${(s.name||'').replace(/'/g,'')}')">Remove</button></div></div>`;
-  }
+    return `<div class="staff-card"><div class="staff-card-top"><div class="staff-av ${avcls}">${ini(s.name)}</div><div><div class="staff-nm">${s.name}</div><div class="staff-sub">${sub}</div></div></div><div class="staff-row2">${bdg}<span class="staff-contact">${s.contact||''}</span></div>
   const dEl=document.getElementById('staff-grid-doctors');
   const nEl=document.getElementById('staff-grid-nurses');
   if(dEl) dEl.innerHTML=doctors.length?doctors.map(card).join(''):'<div class="staff-empty">No doctors added yet. Add a user with the Doctor role to see them here.</div>';
