@@ -701,6 +701,12 @@
 </div>
 
 <script src="app.js" type="module"></script>
-<script>if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js'); }</script>
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => r.unregister());
+  });
+}
+</script>
 </body>
 </html>
