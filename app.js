@@ -843,9 +843,11 @@ function updateAuthUI(){
     bnavAcc.innerHTML=loggedIn?'<span class="b-icon">👤</span>Account':'<span class="b-icon">🔑</span>Login';
     bnavAcc.onclick=loggedIn?function(){showPage('change-password');}:function(){showPage('login');};
   }
-  // Issue 8: Show/hide bottom nav based on login state
+    // Issue 8: Show/hide bottom nav and hamburger based on login state
   const bottomNav=document.getElementById('bottom-nav');
   if(bottomNav) bottomNav.style.display=loggedIn?'block':'none';
+  const hamburgerBtn=document.getElementById('hamburger-btn');
+  if(hamburgerBtn) hamburgerBtn.style.display=loggedIn?'block':'none';
   if(loggedIn){
     const av=ini(u.name);
     document.getElementById('user-av-top').textContent=av;
