@@ -670,15 +670,28 @@ async function loadUsers(){
   try{
     const data=await api('GET','/api/accounts');
     if(!data||!data.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">No users yet.</td></tr>'; return; }
-        tbody.innerHTML=data.map(u=>`<tr>
-      <td><b>${u.name||'—'}</b></td>
-      <td><span class="badge">${u.role||'—'}</span></td>
-      <td style="font-family:monospace;font-size:13px">${u.username||'—'}</td>
-      <td style="font-size:12px;color:var(--t2)">${u.email||'—'}</td>
-      <td>${u.dept||'—'}</td>
-      <td style="font-size:12px;color:var(--t2)">${u.qual||'—'}</td>
-      <td style="font-size:12px;color:var(--t2)">${u.created_at?new Date(u.created_at).toLocaleDateString('en-IN'):'—'}</td>
-    </tr>`).join('');
+            tbody.innerHTML=data.map(u=>{
+      const isMe = u.id === window._currentUser?.id;
+      const inactive = u.status === 'inactive';
+      const statusBadgeHtml = inactive
+        ? '<span class="badge badge-gray">Inactive</span>'
+        : '<span class="badge badge-ok">Active</span>';
+      const toggleBtn = isMe ? '' : `
+        <button class="btn sm ${inactive?'primary':'danger'}"
+          onclick="toggleUserStatus('${u.id}','${inactive?'active':'inactive'}','${(u.name||'').replace(/'/g,'')}')"
+          style="margin-left:6px">
+          ${inactive?'Activate':'Deactivate'}
+        </button>`;
+      return `<tr style="${inactive?'opacity:.55':''}">
+        <td><b>${u.name||'—'}</b></td>
+        <td><span class="badge">${u.role||'—'}</span></td>
+        <td style="font-family:monospace;font-size:13px">${u.username||'—'}</td>
+        <td style="font-size:12px;color:var(--t2)">${u.email||'—'}</td>
+        <td>${u.dept||'—'}</td>
+        <td style="font-size:12px;color:var(--t2)">${u.created_at?new Date(u.created_at).toLocaleDateString('en-IN'):'—'}</td>
+        <td style="white-space:nowrap">${statusBadgeHtml}${toggleBtn}</td>
+      </tr>`;
+    }).join('');
   }catch(e){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:#dc2626">'+e.message+'</td></tr>'; }
 }
 
