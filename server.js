@@ -85,6 +85,8 @@ async function initDB() {
     ALTER TABLE accounts     ADD COLUMN IF NOT EXISTS locked_until      TIMESTAMPTZ;
     ALTER TABLE accounts     ADD COLUMN IF NOT EXISTS status            TEXT      DEFAULT 'active';
     ALTER TABLE staff        ADD COLUMN IF NOT EXISTS fee               INTEGER   DEFAULT 0;
+    ALTER TABLE staff        ADD COLUMN IF NOT EXISTS working_hours     TEXT      DEFAULT NULL;
+    ALTER TABLE staff        ADD COLUMN IF NOT EXISTS account_id        TEXT      DEFAULT NULL;
     ALTER TABLE appointments ADD COLUMN IF NOT EXISTS fee               INTEGER   DEFAULT 0;
     ALTER TABLE appointments ADD COLUMN IF NOT EXISTS advance           INTEGER   DEFAULT 0;
     ALTER TABLE appointments ADD COLUMN IF NOT EXISTS payment_status    TEXT      DEFAULT 'unpaid';
@@ -590,18 +592,49 @@ app.post('/api/admin/sync-staff', requireAdmin, async (req, res) => {
     const accounts = await pool.query(`SELECT * FROM accounts WHERE role IN ('doctor','nurse','staff','pharmacist')`);
     let synced = 0;
     for (const a of accounts.rows) {
-      const exists = await pool.query('SELECT 1 FROM staff WHERE name=$1', [a.name]);
-      if (exists.rowCount === 0) {
+      // Check by account_id first, then by name as fallback
+      const existsById = a.id ? await pool.query('SELECT 1 FROM staff WHERE account_id=$1', [a.id]) : { rowCount: 0 };
+      const existsByName = await pool.query('SELECT 1 FROM staff WHERE name=$1 AND (account_id IS NULL OR account_id=\'\')', [a.name]);
+      if (existsById.rowCount === 0 && existsByName.rowCount === 0) {
         const staffId = 'stf' + Date.now() + Math.random().toString(36).slice(2,5);
         await pool.query(
-          `INSERT INTO staff (id,name,role,dept,qual,contact,fee) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
-          [staffId, a.name, a.role==='pharmacist'?'staff':a.role, a.dept||'', a.qual||'', a.mobile||'', a.fee||0]
+          `INSERT INTO staff (id,name,role,dept,qual,contact,fee,account_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
+          [staffId, a.name, a.role==='pharmacist'?'staff':a.role, a.dept||'', a.qual||'', a.mobile||'', a.fee||0, a.id]
         );
         synced++;
         await new Promise(r => setTimeout(r, 5));
+      } else if (existsByName.rowCount > 0 && existsById.rowCount === 0) {
+        // Link existing staff record to account
+        await pool.query('UPDATE staff SET account_id=$1 WHERE name=$2 AND (account_id IS NULL OR account_id=\'\')', [a.id, a.name]);
       }
     }
     ok(res, { synced, message:`${synced} staff members synced.` });
+  } catch(e) { err(res,e); }
+});
+
+// ── WORKING HOURS ─────────────────────────────────────────────────────────────
+app.put('/api/staff/:id/working-hours', requireAuth, async (req, res) => {
+  const { workingHours } = req.body; const actor = req.user;
+  try {
+    await pool.query('UPDATE staff SET working_hours=$1 WHERE id=$2', [JSON.stringify(workingHours), req.params.id]);
+    await audit({ username:actor.username, userRole:actor.role, event:'STAFF_UPDATED',
+      record:req.params.id, oldValue:'Working hours', newValue:JSON.stringify(workingHours), ip:req.ip });
+    ok(res, { id:req.params.id, workingHours });
+  } catch(e) { err(res,e); }
+});
+
+// ── APPOINTMENT BOOKED SLOTS (public) ────────────────────────────────────────
+app.get('/api/public/booked-slots', async (req, res) => {
+  const { doctor, date } = req.query;
+  if (!doctor || !date) return res.status(400).json({ ok:false, error:'doctor and date required' });
+  try {
+    const rows = (await pool.query(
+      `SELECT time FROM appointments WHERE doctor=$1 AND date=$2 AND status!='cancelled' AND time IS NOT NULL AND time!=''`,
+      [doctor, date]
+    )).rows;
+    const staffRow = (await pool.query('SELECT working_hours FROM staff WHERE name=$1', [doctor])).rows[0];
+    const workingHours = staffRow?.working_hours ? JSON.parse(staffRow.working_hours) : null;
+    ok(res, { bookedTimes: rows.map(r => r.time), workingHours });
   } catch(e) { err(res,e); }
 });
 
