@@ -103,6 +103,12 @@ async function initDB() {
     ALTER TABLE accounts ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
   `);
 
+    // Add lockout columns if missing
+  await pool.query(`
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS failed_attempts INTEGER DEFAULT 0;
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
+  `);
+
   // Migrate existing TEXT date columns to proper types (runs once, safe on re-deploy)
   try {
     await pool.query(`
