@@ -668,6 +668,29 @@ app.get('/api/audit/stats', requireAdmin, async (req, res) => {
   } catch(e) { err(res,e); }
 });
 
+// ── STAFF SYNC — copies accounts → staff table (run once after migration) ─────
+app.post('/api/admin/sync-staff', requireAdmin, async (req, res) => {
+  try {
+    const accounts = await pool.query(
+      `SELECT * FROM accounts WHERE role IN ('doctor','nurse','staff','pharmacist')`
+    );
+    let synced = 0;
+    for (const a of accounts.rows) {
+      const exists = await pool.query('SELECT 1 FROM staff WHERE name=$1', [a.name]);
+      if (exists.rowCount === 0) {
+        const staffId = 'stf' + Date.now() + Math.random().toString(36).slice(2,5);
+        await pool.query(
+          `INSERT INTO staff (id,name,role,dept,qual,contact) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+          [staffId, a.name, a.role==='pharmacist'?'staff':a.role, a.dept||'', a.qual||'', a.mobile||'']
+        );
+        synced++;
+        await new Promise(r => setTimeout(r, 5)); // avoid duplicate IDs
+      }
+    }
+    ok(res, { synced, message: `${synced} staff members synced.` });
+  } catch(e) { err(res,e); }
+});
+
 // ── FRONTEND ──────────────────────────────────────────────────────────────────
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
