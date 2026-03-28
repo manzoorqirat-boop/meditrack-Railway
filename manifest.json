@@ -1,22 +1,60 @@
 {
-  "name": "MediTrack Hospital",
+  "name": "MediTrack — Hospital Management",
   "short_name": "MediTrack",
-  "description": "Hospital management system",
+  "description": "Complete hospital management — patients, vitals, staff, wards and appointments in one place.",
+  "lang": "en",
+  "dir": "ltr",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "background_color": "#F7F8F6",
   "theme_color": "#0A5C47",
-  "orientation": "portrait",
+  "orientation": "any",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "icon.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "icon.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Add Patient",
+      "short_name": "Add Patient",
+      "description": "Admit a new patient",
+      "url": "/?page=patients",
+      "icons": [{ "src": "icon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Log Vitals",
+      "short_name": "Vitals",
+      "description": "Record patient vitals",
+      "url": "/?page=vitals",
+      "icons": [{ "src": "icon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Appointments",
+      "short_name": "Appointments",
+      "description": "View today's appointments",
+      "url": "/?page=appointments",
+      "icons": [{ "src": "icon.png", "sizes": "192x192" }]
+    }
+  ],
+  "categories": ["medical", "productivity", "utilities"]
 }
