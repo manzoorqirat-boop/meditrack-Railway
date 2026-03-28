@@ -45,10 +45,20 @@ window.showPage=function(id){
   else if(id==='staff')            { stopVitalsClock(); renderStaffPage(); }
   else if(id==='history')          { stopVitalsClock(); populateHistorySelect(); renderHistory(); }
   else if(id==='appointments')     { stopVitalsClock(); renderAppointments(); }
-  else if(id==='book-appointment') { stopVitalsClock(); initBookAppt(); }
+  else if(id==='book-appointment') { stopVitalsClock(); initPublicBookAppt(); }
   else if(id==='change-password')  { stopVitalsClock(); renderChangePassword(); }
   else if(id==='audit')            { stopVitalsClock(); loadAuditStats(); loadAudit(1); }
   else if(id==='login')            { stopVitalsClock(); resetLoginForm(); }
+};
+
+// Public booking — accessible without login
+window.showPublicBooking=function(){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const pg=document.getElementById('page-book-appointment');
+  if(pg) pg.classList.add('active');
+  document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page==='book-appointment'));
+  stopVitalsClock();
+  initPublicBookAppt();
 };
 
 window.openDrawer=function(){ document.getElementById('drawer').classList.add('open'); document.getElementById('drawer-overlay').classList.add('open'); document.body.style.overflow='hidden'; };
@@ -101,12 +111,12 @@ async function loadAll(){
   }
 }
 
-// Normalize snake_case from DB → camelCase used in UI
+// Normalize snake_case from DB → camelCase
 function normalizePatient(r){ return {id:r.id,name:r.name,age:r.age,gender:r.gender,blood:r.blood,contact:r.contact,wardId:r.ward_id,admitDate:r.admit_date,doctor:r.doctor,diagnosis:r.diagnosis,allergies:r.allergies,status:r.status,dischargeDate:r.discharge_date,updatedAt:r.updated_at}; }
 function normalizeVital(r){ return {id:r.id,patientId:r.patient_id,time:r.time,bp:r.bp,pulse:r.pulse,temp:r.temp,spo2:r.spo2,resp:r.resp,glucose:r.glucose,pain:r.pain,nurse:r.nurse,notes:r.notes,savedAt:r.saved_at}; }
 function normalizeWard(r){ return {id:r.id,name:r.name,beds:r.beds,type:r.type}; }
-function normalizeStaff(r){ return {id:r.id,name:r.name,role:r.role,dept:r.dept,qual:r.qual,contact:r.contact}; }
-function normalizeAppt(r){ return {id:r.id,patientName:r.patient_name,mobile:r.mobile,age:r.age,gender:r.gender,date:r.date,time:r.time,doctor:r.doctor,dept:r.dept,reason:r.reason,notes:r.notes,status:r.status,createdAt:r.created_at}; }
+function normalizeStaff(r){ return {id:r.id,name:r.name,role:r.role,dept:r.dept,qual:r.qual,contact:r.contact,fee:r.fee||0}; }
+function normalizeAppt(r){ return {id:r.id,patientName:r.patient_name,mobile:r.mobile,age:r.age,gender:r.gender,date:r.date,time:r.time,doctor:r.doctor,dept:r.dept,reason:r.reason,notes:r.notes,status:r.status,createdAt:r.created_at,fee:r.fee||0,advance:r.advance||0,paymentStatus:r.payment_status||'unpaid',paymentRef:r.payment_ref||''}; }
 
 function refreshCurrentPage(){
   const active=document.querySelector('.page.active'); if(!active) return;
@@ -227,13 +237,11 @@ window.savePatient=async function(){
 function populatePatientSelect(){
   const admitted=window._patients.filter(p=>p.status==='admitted');
   document.getElementById('vitals-patient-select').innerHTML='<option value="">— choose patient —</option>'+admitted.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-  setVitalsDateTime();
-  startVitalsClock();
+  setVitalsDateTime(); startVitalsClock();
 }
 
 function setVitalsDateTime(){
-  const now=new Date();
-  const pad=n=>String(n).padStart(2,'0');
+  const now=new Date(), pad=n=>String(n).padStart(2,'0');
   const dateStr=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
   const timeStr=pad(now.getHours())+':'+pad(now.getMinutes());
   const dateEl=document.getElementById('vitals-date-display');
@@ -313,29 +321,23 @@ window.saveWard=async function(){
   }catch(e){ alert('Save failed: '+e.message); }
 };
 
-// ── STAFF ──────────────────────────────────────────────────────────
-// Staff is view-only — managed through User Management
+// ── STAFF (view-only) ──────────────────────────────────────────────
 function renderStaffPage(){
   const doctors=window._staff.filter(s=>s.role==='doctor');
   const nurses=window._staff.filter(s=>s.role!=='doctor');
-
   function card(s){
     const avcls=s.role==='doctor'?'doctor':s.role==='nurse'?'nurse':'other';
-    const bdg=s.role==='doctor'
-      ? '<span class="badge badge-info">Doctor</span>'
-      : s.role==='nurse'
-        ? '<span class="badge badge-ok">Nurse</span>'
-        : '<span class="badge badge-purple">Staff</span>';
+    const bdg=s.role==='doctor'?'<span class="badge badge-info">Doctor</span>':s.role==='nurse'?'<span class="badge badge-ok">Nurse</span>':'<span class="badge badge-purple">Staff</span>';
     const sub=[s.qual,s.dept].filter(Boolean).join(' · ')||'—';
+    const feeStr = s.role==='doctor'&&s.fee>0 ? `<span style="font-size:11px;color:var(--p);font-weight:600">₹${s.fee}</span>` : '';
     return `<div class="staff-card">
       <div class="staff-card-top">
         <div class="staff-av ${avcls}">${ini(s.name)}</div>
         <div><div class="staff-nm">${s.name}</div><div class="staff-sub">${sub}</div></div>
       </div>
-      <div class="staff-row2">${bdg}<span class="staff-contact">${s.contact||''}</span></div>
+      <div class="staff-row2">${bdg}${feeStr}<span class="staff-contact">${s.contact||''}</span></div>
     </div>`;
   }
-
   const dEl=document.getElementById('staff-grid-doctors');
   const nEl=document.getElementById('staff-grid-nurses');
   if(dEl) dEl.innerHTML=doctors.length?doctors.map(card).join(''):'<div class="staff-empty">No doctors added yet. Add a user with the Doctor role to see them here.</div>';
@@ -364,31 +366,23 @@ window.renderHistory=async function(){
   const page   = window._historyPage || 1;
   const container = document.getElementById('history-list');
   container.innerHTML = '<div class="card"><div class="empty-state">Loading…</div></div>';
-
   const params = new URLSearchParams({ page, limit:100 });
   if(pid)  params.set('patientId', pid);
   if(from) params.set('from', from);
   if(to)   params.set('to', to);
   if(status==='abnormal') params.set('abnormal','true');
-
   try{
     const data = await api('GET','/api/vitals/history?'+params.toString());
     const { entries, total, pages } = data;
-
     const logs = entries.map(r => {
       const l = normalizeVital(r);
       const as=parseFloat(l.spo2)<94, ap=parseFloat(l.pulse)>110||parseFloat(l.pulse)<50;
       const at=parseFloat(l.temp)>101||parseFloat(l.temp)<96, ag=parseFloat(l.glucose)>180||parseFloat(l.glucose)<70;
       return {...l,_abnormal:as||ap||at||ag,_as:as,_ap:ap,_at:at,_ag:ag};
     });
-
     const filtered = status==='normal' ? logs.filter(l=>!l._abnormal) : logs;
-    if(!filtered.length){
-      container.innerHTML='<div class="card"><div class="empty-state">No vitals records match.</div></div>';
-      return;
-    }
-
-        const patientName = pid ? (getPatient(pid)?.name || '—') : 'All Patients';
+    if(!filtered.length){ container.innerHTML='<div class="card"><div class="empty-state">No vitals records match.</div></div>'; return; }
+    const patientName = pid ? (getPatient(pid)?.name || '—') : 'All Patients';
     const tableRows = filtered.map(l => {
       const p   = getPatient(l.patientId);
       const t   = l.time ? new Date(l.time).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short',year:'numeric'}) : '—';
@@ -408,44 +402,35 @@ window.renderHistory=async function(){
       </tr>
       ${l.notes?`<tr style="border-bottom:1px solid var(--b2);background:var(--surface2)"><td colspan="${pid?10:11}" style="padding:4px 12px 8px;font-size:11px;color:var(--t2)">📝 ${l.notes}</td></tr>`:''}`;
     }).join('');
-
-    const colPatient = !pid ? '<th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">Patient</th>' : '';
-    const tableHtml = `
-      <div style="overflow-x:auto">
-        <div style="padding:12px 14px;border-bottom:1px solid var(--b2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-          <div style="font-size:13px;font-weight:600;color:var(--t1)">${patientName}</div>
-          <div style="font-size:12px;color:var(--t3)">${filtered.length} record${filtered.length!==1?'s':''} · ${filtered.filter(l=>l._abnormal).length} abnormal</div>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:13px">
-          <thead>
-            <tr style="background:var(--surface2);border-bottom:2px solid var(--b1)">
-              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;text-align:left">Date &amp; Time</th>
-              ${colPatient}
-              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">BP<br><span style="font-weight:400;text-transform:none;letter-spacing:0">mmHg</span></th>
-              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Pulse<br><span style="font-weight:400;text-transform:none;letter-spacing:0">bpm</span></th>
-              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Temp<br><span style="font-weight:400;text-transform:none;letter-spacing:0">°F</span></th>
-              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">SpO₂<br><span style="font-weight:400;text-transform:none;letter-spacing:0">%</span></th>
-              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">RR<br><span style="font-weight:400;text-transform:none;letter-spacing:0">/min</span></th>
-              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Glucose<br><span style="font-weight:400;text-transform:none;letter-spacing:0">mg/dL</span></th>
-              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Pain<br><span style="font-weight:400;text-transform:none;letter-spacing:0">/10</span></th>
-              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Nurse</th>
-              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Status</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </div>`;
-
-    const pgHtml = pages>1 ? `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--b2)">
-        <span style="font-size:12px;color:var(--t3)">Page ${page} of ${pages} · ${total} records</span>
-        <div style="display:flex;gap:8px">
-          ${page>1?`<button class="btn sm" onclick="window._historyPage=${page-1};window.renderHistory()">← Prev</button>`:''}
-          ${page<pages?`<button class="btn sm" onclick="window._historyPage=${page+1};window.renderHistory()">Next →</button>`:''}
-        </div>
-      </div>` : '';
+    const colPatient = !pid ? '<th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;text-align:left">Patient</th>' : '';
+    const tableHtml = `<div style="overflow-x:auto">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--b2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="font-size:13px;font-weight:600;color:var(--t1)">${patientName}</div>
+        <div style="font-size:12px;color:var(--t3)">${filtered.length} record${filtered.length!==1?'s':''} · ${filtered.filter(l=>l._abnormal).length} abnormal</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--b1)">
+          <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;text-align:left">Date &amp; Time</th>
+          ${colPatient}
+          <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">BP<br><span style="font-weight:400;text-transform:none;letter-spacing:0">mmHg</span></th>
+          <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Pulse<br><span style="font-weight:400;text-transform:none;letter-spacing:0">bpm</span></th>
+          <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Temp<br><span style="font-weight:400;text-transform:none;letter-spacing:0">°F</span></th>
+          <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">SpO₂<br><span style="font-weight:400;text-transform:none;letter-spacing:0">%</span></th>
+          <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">RR<br><span style="font-weight:400;text-transform:none;letter-spacing:0">/min</span></th>
+          <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Glucose<br><span style="font-weight:400;text-transform:none;letter-spacing:0">mg/dL</span></th>
+          <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Pain<br><span style="font-weight:400;text-transform:none;letter-spacing:0">/10</span></th>
+          <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Nurse</th>
+          <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Status</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table></div>`;
+    const pgHtml = pages>1 ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--b2)">
+      <span style="font-size:12px;color:var(--t3)">Page ${page} of ${pages} · ${total} records</span>
+      <div style="display:flex;gap:8px">
+        ${page>1?`<button class="btn sm" onclick="window._historyPage=${page-1};window.renderHistory()">← Prev</button>`:''}
+        ${page<pages?`<button class="btn sm" onclick="window._historyPage=${page+1};window.renderHistory()">Next →</button>`:''}
+      </div></div>` : '';
     container.innerHTML=`<div class="card" style="padding:0;overflow:hidden">${tableHtml}${pgHtml}</div>`;
-
   } catch(e){
     container.innerHTML=`<div class="card"><div class="empty-state" style="color:#c0392b">Failed: ${e.message}</div></div>`;
   }
@@ -454,35 +439,23 @@ window.renderHistory=async function(){
 window.printReport=function(){
   const pid  = document.getElementById('hist-patient').value;
   const name = pid ? (getPatient(pid)?.name||'Patient') : null;
-  if(!pid){
-    alert('Please select a specific patient from the filter before printing.');
-    return;
-  }
+  if(!pid){ alert('Please select a specific patient from the filter before printing.'); return; }
   const table = document.querySelector('#history-list table');
   if(!table){ alert('No data to print. Apply a filter first.'); return; }
-
   const from   = document.getElementById('hist-date-from').value;
   const to     = document.getElementById('hist-date-to').value;
   const period = (from||to) ? `${from||'—'} to ${to||'—'}` : 'All dates';
   const now    = new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'});
-
-  // Inject a temporary print-only element + hide everything else
   const printDiv = document.createElement('div');
   printDiv.id = 'meditrack-print-area';
-  printDiv.innerHTML = `
-    <div style="font-family:system-ui,sans-serif;font-size:13px">
-      <div style="margin-bottom:4px;font-size:18px;font-weight:700">MediTrack — Vitals Report</div>
-      <div style="font-size:12px;color:#555;margin-bottom:16px">
-        Patient: <b>${name}</b> &nbsp;·&nbsp; ${period} &nbsp;·&nbsp; Generated: ${now}
-      </div>
-      ${table.outerHTML}
-      <div style="margin-top:16px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px">
-        Reference ranges: BP 90–140/60–90 mmHg · Pulse 50–110 bpm · Temp 96–101°F · SpO₂ ≥94% · Glucose 70–180 mg/dL
-      </div>
-    </div>`;
+  printDiv.innerHTML = `<div style="font-family:system-ui,sans-serif;font-size:13px">
+    <div style="margin-bottom:4px;font-size:18px;font-weight:700">MediTrack — Vitals Report</div>
+    <div style="font-size:12px;color:#555;margin-bottom:16px">Patient: <b>${name}</b> &nbsp;·&nbsp; ${period} &nbsp;·&nbsp; Generated: ${now}</div>
+    ${table.outerHTML}
+    <div style="margin-top:16px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px">
+      Reference ranges: BP 90–140/60–90 mmHg · Pulse 50–110 bpm · Temp 96–101°F · SpO₂ ≥94% · Glucose 70–180 mg/dL
+    </div></div>`;
   document.body.appendChild(printDiv);
-
-  // Inject print CSS
   const style = document.createElement('style');
   style.id = 'meditrack-print-style';
   style.textContent = `
@@ -494,28 +467,18 @@ window.printReport=function(){
       #meditrack-print-area td { padding:6px 8px; border:1px solid #ddd; }
       @page { margin: 15mm; size: A4 landscape; }
     }
-    #meditrack-print-area { display: none; }
-  `;
+    #meditrack-print-area { display: none; }`;
   document.head.appendChild(style);
-
   window.print();
-
-  // Cleanup after print dialog closes
   setTimeout(()=>{
-    const el = document.getElementById('meditrack-print-area');
-    const st = document.getElementById('meditrack-print-style');
-    if(el) el.remove();
-    if(st) st.remove();
+    document.getElementById('meditrack-print-area')?.remove();
+    document.getElementById('meditrack-print-style')?.remove();
   }, 1000);
 };
 
-
-
 // ── MODALS ─────────────────────────────────────────────────────────
 window.closeModal=function(id){ document.getElementById(id).classList.remove('open'); };
-document.querySelectorAll('.modal-backdrop').forEach(b=>{
-  b.addEventListener('click',e=>{ if(e.target===b) b.classList.remove('open'); });
-});
+document.querySelectorAll('.modal-backdrop').forEach(b=>{ b.addEventListener('click',e=>{ if(e.target===b) b.classList.remove('open'); }); });
 window.openSetup=function(){};
 window.closeSetup=function(){};
 
@@ -523,22 +486,6 @@ window.closeSetup=function(){};
 window._appointments = [];
 
 function todayStr(){ return new Date().toISOString().split('T')[0]; }
-
-function refreshApptDoctorSelect(){
-  const el=document.getElementById('appt-doctor'); if(!el) return;
-  const docs=window._staff.filter(s=>s.role==='doctor');
-  el.innerHTML='<option value="">— select doctor —</option>'+docs.map(d=>`<option value="${d.name}">${d.name}${d.dept?' · '+d.dept:''}</option>`).join('');
-}
-
-function initBookAppt(){
-  document.getElementById('appt-date').value=todayStr();
-  refreshApptDoctorSelect();
-  ['appt-pname','appt-mobile','appt-reason','appt-notes'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('appt-age').value='';
-  document.getElementById('appt-appttime').value='';
-  const msg=document.getElementById('appt-form-msg');
-  if(msg) msg.style.display='none';
-}
 
 function renderAppointments(filter){
   window._apptFilter=filter||window._apptFilter||'all';
@@ -549,32 +496,20 @@ function renderAppointments(filter){
   document.getElementById('appt-stat-today').textContent=todayList.length;
   document.getElementById('appt-stat-upcoming').textContent=upcoming.length;
   document.getElementById('appt-stat-total').textContent=list.length;
-  if(window._apptFilter==='today')     list=todayList;
-  else if(window._apptFilter==='upcoming')  list=upcoming;
-  else if(window._apptFilter==='completed') list=list.filter(a=>a.status==='completed');
+  if(window._apptFilter==='today')      list=todayList;
+  else if(window._apptFilter==='upcoming')   list=upcoming;
+  else if(window._apptFilter==='completed')  list=list.filter(a=>a.status==='completed');
   document.getElementById('appt-list').innerHTML=list.length?list.map(a=>{
     const dLabel=a.date===today?'Today':a.date;
     const sBadge=a.status==='completed'?'<span class="badge badge-ok">Completed</span>':a.date<today?'<span class="badge badge-gray">Past</span>':a.date===today?'<span class="badge badge-warn">Today</span>':'<span class="badge badge-info">Upcoming</span>';
-    return `<div class="appt-row"><div class="appt-info"><div><div class="appt-time">${a.time||'—'}</div><div style="font-size:10px;color:var(--t2)">${dLabel}</div></div><div class="avatar">${ini(a.patientName)}</div><div><div class="appt-name">${a.patientName}</div><div class="appt-meta">${a.doctor?'Dr. '+a.doctor:'—'} · ${a.dept||'—'}</div><div class="appt-meta">${a.reason||''}</div></div></div><div class="appt-actions">${sBadge}${a.status!=='completed'?`<button class="btn sm" onclick="markApptDone('${a.id}')">Done</button>`:''}<button class="btn sm danger" onclick="deleteAppt('${a.id}')">✕</button></div></div>`;
+    const payBadge = a.advance>0
+      ? `<span class="badge badge-ok" style="font-size:10px">₹${a.advance} paid</span>`
+      : a.fee>0 ? `<span class="badge badge-gray" style="font-size:10px">₹${a.fee} due</span>` : '';
+    return `<div class="appt-row"><div class="appt-info"><div><div class="appt-time">${a.time||'—'}</div><div style="font-size:10px;color:var(--t2)">${dLabel}</div></div><div class="avatar">${ini(a.patientName)}</div><div><div class="appt-name">${a.patientName}</div><div class="appt-meta">${a.doctor?'Dr. '+a.doctor:'—'} · ${a.dept||'—'}</div><div class="appt-meta">${a.reason||''}</div></div></div><div class="appt-actions">${sBadge}${payBadge}${a.status!=='completed'?`<button class="btn sm" onclick="markApptDone('${a.id}')">Done</button>`:''}<button class="btn sm danger" onclick="deleteAppt('${a.id}')">✕</button></div></div>`;
   }).join(''):'<div class="empty-state">No appointments found.</div>';
 }
 
 window.filterAppts=function(f,el){ document.querySelectorAll('#page-appointments .tab').forEach(t=>t.classList.remove('active')); if(el) el.classList.add('active'); renderAppointments(f); };
-
-window.saveAppointment=async function(){
-  const name=document.getElementById('appt-pname').value.trim();
-  const mobile=document.getElementById('appt-mobile').value.trim();
-  const date=document.getElementById('appt-date').value;
-  if(!name||!mobile||!date){ alert('Patient name, mobile, and date are required.'); return; }
-  const id='apt'+Date.now();
-  const appt={id,patientName:name,mobile,age:document.getElementById('appt-age').value,gender:document.getElementById('appt-gender').value,date,time:document.getElementById('appt-appttime').value,doctor:document.getElementById('appt-doctor').value,dept:document.getElementById('appt-dept').value,reason:document.getElementById('appt-reason').value.trim(),notes:document.getElementById('appt-notes').value.trim(),status:'scheduled',createdAt:new Date().toISOString()};
-  try{
-    await api('POST','/api/appointments',appt);
-    window._appointments.unshift(appt);
-    const m=document.getElementById('appt-form-msg');
-    if(m){m.textContent='✓ Appointment booked for '+name+'!';m.style.display='block';setTimeout(()=>{m.style.display='none';showPage('appointments');},1500);}
-  }catch(e){ alert('Save failed: '+e.message); }
-};
 
 window.markApptDone=async function(id){
   const idx=window._appointments.findIndex(a=>a.id===id); if(idx<0) return;
@@ -599,6 +534,146 @@ window.deleteAppt=function(id){
     }
   });
 };
+
+// ── PUBLIC APPOINTMENT BOOKING ─────────────────────────────────────
+let _apptDoctors=[], _apptSettings={};
+
+async function initPublicBookAppt(){
+  showApptStep(1);
+  document.getElementById('appt-date').value=todayStr();
+  ['appt-pname','appt-mobile','appt-reason','appt-notes','appt-payment-ref','appt-paid-amount'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  const ageEl=document.getElementById('appt-age'); if(ageEl) ageEl.value='';
+  const timeEl=document.getElementById('appt-appttime'); if(timeEl) timeEl.value='';
+  ['appt-form-msg','appt-form-err','appt-pay-err'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display='none'; });
+  const feeCard=document.getElementById('appt-fee-card'); if(feeCard) feeCard.style.display='none';
+  const skipBtn=document.getElementById('appt-skip-payment-btn');
+  if(skipBtn) skipBtn.style.display=window._currentUser?'inline-flex':'none';
+  const backBtn=document.getElementById('appt-back-btn');
+  if(backBtn) backBtn.style.display=window._currentUser?'inline-flex':'none';
+  try{
+    const [docData, settingsData] = await Promise.all([
+      fetch('/api/public/doctors').then(r=>r.json()),
+      fetch('/api/public/settings').then(r=>r.json())
+    ]);
+    _apptDoctors  = docData.ok   ? docData.data   : [];
+    _apptSettings = settingsData.ok ? settingsData.data : {};
+    const nameEl=document.getElementById('appt-hospital-name');
+    if(nameEl) nameEl.textContent=_apptSettings.hospitalName||'MediTrack Hospital';
+    const sel=document.getElementById('appt-doctor');
+    sel.innerHTML='<option value="">— select doctor —</option>'+_apptDoctors.map(d=>
+      `<option value="${d.name}" data-fee="${d.fee||0}" data-dept="${d.dept||''}">${d.name}${d.dept?' · '+d.dept:''}${d.fee?' · ₹'+d.fee:''}</option>`
+    ).join('');
+  }catch(e){ console.warn('Could not load doctors/settings:', e.message); }
+}
+
+function showApptStep(n){
+  [1,2,3].forEach(i=>{ const el=document.getElementById('appt-step-'+i); if(el) el.style.display=i===n?'block':'none'; });
+}
+
+window.onDoctorSelect=function(sel){
+  const opt=sel.options[sel.selectedIndex];
+  const fee=parseInt(opt?.dataset?.fee||0);
+  const dept=opt?.dataset?.dept||'';
+  const minAdvance=Math.ceil(fee*0.5);
+  const feeCard=document.getElementById('appt-fee-card');
+  if(fee>0){
+    document.getElementById('appt-fee-display').textContent=fee;
+    document.getElementById('appt-min-advance').textContent=minAdvance;
+    document.getElementById('appt-doctor-dept-badge').textContent=dept||'General';
+    feeCard.style.display='block';
+  } else {
+    feeCard.style.display='none';
+  }
+};
+
+window.proceedToPayment=function(){
+  const name=document.getElementById('appt-pname').value.trim();
+  const mobile=document.getElementById('appt-mobile').value.trim();
+  const date=document.getElementById('appt-date').value;
+  const errEl=document.getElementById('appt-form-err');
+  errEl.style.display='none';
+  if(!name||!mobile||!date){ errEl.textContent='Patient name, mobile and date are required.'; errEl.style.display='block'; return; }
+  const sel=document.getElementById('appt-doctor');
+  const opt=sel.options[sel.selectedIndex];
+  const fee=parseInt(opt?.dataset?.fee||0);
+  const minAdvance=Math.ceil(fee*0.5);
+  if(!fee||!_apptSettings.upiId){ saveAppointmentDirect(); return; }
+  document.getElementById('pay-amount-display').textContent=minAdvance;
+  document.getElementById('pay-upi-id-display').textContent=_apptSettings.upiId;
+  document.getElementById('appt-paid-hint').textContent=`Minimum ₹${minAdvance} (50% of ₹${fee})`;
+  document.getElementById('appt-paid-amount').min=minAdvance;
+  const upiLink=`upi://pay?pa=${encodeURIComponent(_apptSettings.upiId)}&pn=${encodeURIComponent(_apptSettings.hospitalName||'Hospital')}&am=${minAdvance}&cu=INR&tn=${encodeURIComponent('Appointment: '+name)}`;
+  const linkEl=document.getElementById('pay-upi-link');
+  linkEl.href=upiLink;
+  linkEl.onclick=function(){ window.location.href=upiLink; return false; };
+  showApptStep(2);
+};
+
+window.saveAppointmentWithPayment=async function(){
+  const ref=document.getElementById('appt-payment-ref').value.trim();
+  const paid=parseInt(document.getElementById('appt-paid-amount').value)||0;
+  const errEl=document.getElementById('appt-pay-err');
+  errEl.style.display='none';
+  const sel=document.getElementById('appt-doctor');
+  const opt=sel.options[sel.selectedIndex];
+  const fee=parseInt(opt?.dataset?.fee||0);
+  const minAdvance=Math.ceil(fee*0.5);
+  if(!ref){ errEl.textContent='Please enter the UPI transaction reference number.'; errEl.style.display='block'; return; }
+  if(paid<minAdvance){ errEl.textContent=`Minimum advance is ₹${minAdvance}. Please enter correct amount.`; errEl.style.display='block'; return; }
+  await _doSaveAppointment({ fee, advance:paid, paymentRef:ref });
+};
+
+window.saveAppointmentDirect=async function(){
+  await _doSaveAppointment({ fee:0, advance:0, paymentRef:'' });
+};
+
+async function _doSaveAppointment({ fee, advance, paymentRef }){
+  const name=document.getElementById('appt-pname').value.trim();
+  const mobile=document.getElementById('appt-mobile').value.trim();
+  const date=document.getElementById('appt-date').value;
+  const sel=document.getElementById('appt-doctor');
+  const opt=sel.options[sel.selectedIndex];
+  const doctor=sel.value;
+  const dept=opt?.dataset?.dept||'';
+  const appt={
+    patientName:name, mobile, age:document.getElementById('appt-age').value,
+    gender:document.getElementById('appt-gender').value, date,
+    time:document.getElementById('appt-appttime').value,
+    doctor, dept,
+    reason:document.getElementById('appt-reason').value.trim(),
+    notes:document.getElementById('appt-notes').value.trim(),
+    fee, advance, paymentRef,
+    paymentStatus: advance>0?'partial':'unpaid',
+    status:'scheduled', createdAt:new Date().toISOString()
+  };
+  try{
+    if(window._currentUser){
+      const data=await api('POST','/api/appointments',{...appt,id:'apt'+Date.now()});
+      if(data) window._appointments.unshift({...appt,id:data.id||'apt'+Date.now()});
+    } else {
+      const r=await fetch('/api/public/appointments',{
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(appt)
+      });
+      const res=await r.json();
+      if(!res.ok) throw new Error(res.error||'Booking failed');
+    }
+    const confirmDetails=document.getElementById('appt-confirm-details');
+    if(confirmDetails){
+      confirmDetails.innerHTML=`
+        <div><b>Patient:</b> ${name}</div>
+        <div><b>Doctor:</b> ${doctor||'To be assigned'}</div>
+        <div><b>Date:</b> ${date}${appt.time?' at '+appt.time:''}</div>
+        <div><b>Mobile:</b> ${mobile}</div>
+        ${advance>0?`<div style="color:var(--ok);margin-top:8px">✓ Advance Paid: ₹${advance}</div>`:''}
+        ${paymentRef?`<div style="font-size:12px;color:var(--t3)">Ref: ${paymentRef}</div>`:''}
+        <div style="margin-top:8px;font-size:12px;color:var(--t3)">Please show this confirmation at reception.</div>`;
+    }
+    showApptStep(3);
+  }catch(e){
+    const errEl=document.getElementById('appt-form-err')||document.getElementById('appt-pay-err');
+    if(errEl){ errEl.textContent='Booking failed: '+e.message; errEl.style.display='block'; }
+  }
+}
 
 // ── ACCOUNT / AUTH ─────────────────────────────────────────────────
 window._currentUser=null;
@@ -678,7 +753,7 @@ window.openCreateUser=function(){
 };
 window.closeCreateUser=function(){
   document.getElementById('create-user-card').style.display='none';
-  ['cu-name','cu-username','cu-email','cu-mobile','cu-qual','cu-pw'].forEach(id=>{
+  ['cu-name','cu-username','cu-email','cu-mobile','cu-qual','cu-pw','cu-fee'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
 };
@@ -693,17 +768,17 @@ window.submitCreateUser=async function(){
   const dept=document.getElementById('cu-dept').value;
   const qual=document.getElementById('cu-qual').value.trim();
   const pw=document.getElementById('cu-pw').value;
+  const fee=parseInt(document.getElementById('cu-fee')?.value||0)||0;
   if(!name||!username||!pw){ errEl.textContent='Name, username and password are required.'; errEl.style.display='block'; return; }
   if(pw.length<8){ errEl.textContent='Password must be at least 8 characters.'; errEl.style.display='block'; return; }
   if(!window._currentUser){ errEl.textContent='You are not logged in.'; errEl.style.display='block'; return; }
   try{
     await api('POST','/api/accounts',{
-      id:'u'+Date.now(), name, role, username, email, mobile, dept, qual,
-      pw, createdAt:new Date().toISOString()
+      id:'u'+Date.now(), name, role, username, email, mobile, dept, qual, pw, fee,
+      createdAt:new Date().toISOString()
     });
-    // Auto-sync to staff list
     if(role==='doctor'||role==='nurse'||role==='staff'||role==='pharmacist'){
-      const staffData={id:'stf'+Date.now(),name,role:role==='pharmacist'?'staff':role,dept,qual,contact:mobile};
+      const staffData={id:'stf'+Date.now(),name,role:role==='pharmacist'?'staff':role,dept,qual,contact:mobile,fee};
       try{
         await api('POST','/api/staff',staffData);
         const idx=window._staff.findIndex(s=>s.id===staffData.id);
@@ -722,9 +797,7 @@ window.toggleUserStatus=function(id, newStatus, name){
     icon: newStatus==='inactive' ? '🔒' : '✅',
     title: newStatus==='inactive' ? 'Deactivate user?' : 'Activate user?',
     record: name,
-    message: newStatus==='inactive'
-      ? 'This user will not be able to log in until reactivated.'
-      : 'This user will be able to log in again.',
+    message: newStatus==='inactive' ? 'This user will not be able to log in until reactivated.' : 'This user will be able to log in again.',
     btnLabel: newStatus==='inactive' ? 'Deactivate' : 'Activate',
     onConfirm: async () => {
       await api('PUT', '/api/accounts/'+id+'/status', { status: newStatus });
@@ -738,7 +811,6 @@ async function loadUsers(){
   const tbody=document.getElementById('users-tbody');
   if(!tbody) return;
   tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--t2)">Loading…</td></tr>';
-  // Sync accounts → staff silently
   api('POST','/api/admin/sync-staff').then(r=>{
     if(r&&r.synced>0){ renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect(); }
   }).catch(()=>{});
@@ -748,15 +820,8 @@ async function loadUsers(){
     tbody.innerHTML=data.map(u=>{
       const isMe = u.id === window._currentUser?.id;
       const inactive = u.status === 'inactive';
-      const statusBadgeHtml = inactive
-        ? '<span class="badge badge-gray">Inactive</span>'
-        : '<span class="badge badge-ok">Active</span>';
-      const toggleBtn = isMe ? '' : `
-        <button class="btn sm ${inactive?'primary':'danger'}"
-          onclick="toggleUserStatus('${u.id}','${inactive?'active':'inactive'}','${(u.name||'').replace(/'/g,'')}')"
-          style="margin-left:6px">
-          ${inactive?'Activate':'Deactivate'}
-        </button>`;
+      const statusBadgeHtml = inactive ? '<span class="badge badge-gray">Inactive</span>' : '<span class="badge badge-ok">Active</span>';
+      const toggleBtn = isMe ? '' : `<button class="btn sm ${inactive?'primary':'danger'}" onclick="toggleUserStatus('${u.id}','${inactive?'active':'inactive'}','${(u.name||'').replace(/'/g,'')}')") style="margin-left:6px">${inactive?'Activate':'Deactivate'}</button>`;
       return `<tr style="${inactive?'opacity:.55':''}">
         <td><b>${u.name||'—'}</b></td>
         <td><span class="badge">${u.role||'—'}</span></td>
@@ -822,11 +887,7 @@ function resetLoginForm(){
 window.logoutUser=async function(){
   const u=window._currentUser||{};
   try{
-    await fetch('/api/accounts/logout',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ username:u.username||'', role:u.role||'' })
-    });
+    await fetch('/api/accounts/logout',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username:u.username||'', role:u.role||'' }) });
   }catch(_){}
   localStorage.removeItem('meditrack_token');
   window._currentUser=null;
@@ -903,8 +964,7 @@ window.dischargePatient=function(id){
 
 // ── DARK MODE ───────────────────────────────────────────────────────
 (function(){
-  if(localStorage.getItem('meditrack_theme')==='dark')
-    document.documentElement.classList.add('dark');
+  if(localStorage.getItem('meditrack_theme')==='dark') document.documentElement.classList.add('dark');
   updateThemeIcon();
 })();
 window.toggleTheme=function(){
@@ -937,11 +997,7 @@ window.checkVital=function(field,value){
   if(!input) return;
   input.classList.remove('vi-normal','vi-warn','vi-critical');
   const level=rule.check(value);
-  if(!level||value===''){
-    if(ind) ind.textContent='';
-    if(hint){hint.className='vitals-hint';hint.textContent='';}
-    return;
-  }
+  if(!level||value===''){ if(ind) ind.textContent=''; if(hint){hint.className='vitals-hint';hint.textContent='';} return; }
   input.classList.add('vi-'+level);
   if(ind) ind.textContent=VI_ICONS[level];
   if(hint){hint.className='vitals-hint hint-'+level;hint.textContent=rule.hint[level];}
@@ -988,10 +1044,7 @@ async function loadAudit(page){
     if(!data) return;
     const {entries,total,pages}=data;
     window._auditEntries=entries;
-    if(!entries.length){
-      tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--t3)">No records match.</td></tr>';
-      if(pgEl) pgEl.innerHTML=''; return;
-    }
+    if(!entries.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--t3)">No records match.</td></tr>'; if(pgEl) pgEl.innerHTML=''; return; }
     tbody.innerHTML=entries.map((e,i)=>`<tr style="border-bottom:1px solid var(--b2);background:${i%2?'var(--surface2)':'transparent'}">
       <td style="padding:9px 14px;white-space:nowrap;font-size:11px;color:var(--t2);font-family:monospace">${fmtTs(e.timestamp)}</td>
       <td style="padding:9px 14px"><div style="font-weight:500">${e.username||'—'}</div><div style="font-size:10px;color:var(--t3)">${e.user_role||''}</div></td>
@@ -1013,9 +1066,7 @@ async function loadAudit(page){
           ${cur<pages?`<button class="btn" style="padding:4px 10px;font-size:12px" onclick="loadAudit(${cur+1})">Next →</button>`:''}
         </div>`;
     }
-  }catch(e){
-    if(tbody) tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:24px;color:#c0392b">Error: ${e.message}</td></tr>`;
-  }
+  }catch(e){ if(tbody) tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:24px;color:#c0392b">Error: ${e.message}</td></tr>`; }
 }
 
 let _auditDebounce;
