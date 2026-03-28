@@ -1,5 +1,5 @@
-const CACHE = 'meditrack-v2';
-const FILES = ['/', '/index.html'];
+const CACHE = 'meditrack-v3';
+const FILES = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -14,10 +14,18 @@ self.addEventListener('activate', e => {
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     )
   );
-  self.clients.claim();
+    self.clients.claim();
 });
 
+self.addEventListener('fetch', () => {}, { once: true }); // wake guard
+
 self.addEventListener('fetch', e => {
+  // API calls — always network first, never cache
+  if (e.request.url.includes('/api/')) {
+    e.respondWith(fetch(e.request));
+    return;
+  }
+  // Static assets — cache first, fallback to network
   e.respondWith(
     caches.match(e.request).then(r => r || fetch(e.request))
   );
