@@ -388,30 +388,64 @@ window.renderHistory=async function(){
       return;
     }
 
-    const rows = filtered.map(l => {
-      const p=getPatient(l.patientId);
-      const t=l.time?new Date(l.time).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'}):'—';
-      return `<div class="history-row${l._abnormal?' rpt-row-abnormal':''}">
-        <span class="time-badge">${t}</span>
-        <div><div style="font-size:13px;font-weight:500">${p?p.name:'Unknown'}</div>
-        <div class="vitals-chips">
-          <span class="v-chip${l._ap?' abnormal':''}">Pulse ${l.pulse||'—'} bpm</span>
-          <span class="v-chip">BP ${l.bp||'—'}</span>
-          <span class="v-chip${l._at?' abnormal':''}">Temp ${l.temp||'—'}°F</span>
-          <span class="v-chip${l._as?' abnormal':''}">SpO2 ${l.spo2||'—'}%</span>
-        </div></div>
-      </div>`;
+        const patientName = pid ? (getPatient(pid)?.name || '—') : 'All Patients';
+    const tableRows = filtered.map(l => {
+      const p   = getPatient(l.patientId);
+      const t   = l.time ? new Date(l.time).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short',year:'numeric'}) : '—';
+      const ab  = l._abnormal ? 'background:rgba(239,68,68,.05)' : '';
+      return `<tr style="border-bottom:1px solid var(--b2);${ab}">
+        <td style="padding:9px 12px;font-size:12px;color:var(--t2);white-space:nowrap">${t}</td>
+        ${!pid?`<td style="padding:9px 12px;font-size:13px;font-weight:500">${p?p.name:'—'}</td>`:''}
+        <td style="padding:9px 12px;font-size:13px">${l.bp||'—'}</td>
+        <td style="padding:9px 12px;font-size:13px;color:${l._ap?'#dc2626':'inherit'};font-weight:${l._ap?'600':'400'}">${l.pulse||'—'}</td>
+        <td style="padding:9px 12px;font-size:13px;color:${l._at?'#dc2626':'inherit'};font-weight:${l._at?'600':'400'}">${l.temp||'—'}</td>
+        <td style="padding:9px 12px;font-size:13px;color:${l._as?'#dc2626':'inherit'};font-weight:${l._as?'600':'400'}">${l.spo2||'—'}</td>
+        <td style="padding:9px 12px;font-size:13px">${l.resp||'—'}</td>
+        <td style="padding:9px 12px;font-size:13px;color:${l._ag?'#dc2626':'inherit'};font-weight:${l._ag?'600':'400'}">${l.glucose||'—'}</td>
+        <td style="padding:9px 12px;font-size:13px">${l.pain||'—'}</td>
+        <td style="padding:9px 12px;font-size:12px;color:var(--t2)">${l.nurse||'—'}</td>
+        ${l._abnormal?`<td style="padding:9px 12px"><span class="badge badge-danger" style="font-size:10px">Abnormal</span></td>`:'<td style="padding:9px 12px"><span class="badge badge-ok" style="font-size:10px">Normal</span></td>'}
+      </tr>
+      ${l.notes?`<tr style="border-bottom:1px solid var(--b2);background:var(--surface2)"><td colspan="${pid?10:11}" style="padding:4px 12px 8px;font-size:11px;color:var(--t2)">📝 ${l.notes}</td></tr>`:''}`;
     }).join('');
 
+    const colPatient = !pid ? '<th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">Patient</th>' : '';
+    const tableHtml = `
+      <div style="overflow-x:auto">
+        <div style="padding:12px 14px;border-bottom:1px solid var(--b2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div style="font-size:13px;font-weight:600;color:var(--t1)">${patientName}</div>
+          <div style="font-size:12px;color:var(--t3)">${filtered.length} record${filtered.length!==1?'s':''} · ${filtered.filter(l=>l._abnormal).length} abnormal</div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:var(--surface2);border-bottom:2px solid var(--b1)">
+              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;text-align:left">Date &amp; Time</th>
+              ${colPatient}
+              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">BP<br><span style="font-weight:400;text-transform:none;letter-spacing:0">mmHg</span></th>
+              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Pulse<br><span style="font-weight:400;text-transform:none;letter-spacing:0">bpm</span></th>
+              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Temp<br><span style="font-weight:400;text-transform:none;letter-spacing:0">°F</span></th>
+              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">SpO₂<br><span style="font-weight:400;text-transform:none;letter-spacing:0">%</span></th>
+              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">RR<br><span style="font-weight:400;text-transform:none;letter-spacing:0">/min</span></th>
+              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Glucose<br><span style="font-weight:400;text-transform:none;letter-spacing:0">mg/dL</span></th>
+              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Pain<br><span style="font-weight:400;text-transform:none;letter-spacing:0">/10</span></th>
+              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Nurse</th>
+              <th style="padding:9px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:left">Status</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>`;
+
     const pgHtml = pages>1 ? `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid var(--b2)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--b2)">
         <span style="font-size:12px;color:var(--t3)">Page ${page} of ${pages} · ${total} records</span>
         <div style="display:flex;gap:8px">
           ${page>1?`<button class="btn sm" onclick="window._historyPage=${page-1};window.renderHistory()">← Prev</button>`:''}
           ${page<pages?`<button class="btn sm" onclick="window._historyPage=${page+1};window.renderHistory()">Next →</button>`:''}
         </div>
       </div>` : '';
-    container.innerHTML=`<div class="card">${rows}${pgHtml}</div>`;
+    container.innerHTML=`<div class="card" style="padding:0;overflow:hidden">${tableHtml}${pgHtml}</div>`;
+
   } catch(e){
     container.innerHTML=`<div class="card"><div class="empty-state" style="color:#c0392b">Failed: ${e.message}</div></div>`;
   }
