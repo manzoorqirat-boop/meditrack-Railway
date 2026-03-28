@@ -458,36 +458,57 @@ window.printReport=function(){
     alert('Please select a specific patient from the filter before printing.');
     return;
   }
-  // Build printable content
   const table = document.querySelector('#history-list table');
   if(!table){ alert('No data to print. Apply a filter first.'); return; }
-  const from = document.getElementById('hist-date-from').value;
-  const to   = document.getElementById('hist-date-to').value;
-  const period = (from||to) ? `Period: ${from||'—'} to ${to||'—'}` : 'All dates';
-  const now  = new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'});
-  const win  = window.open('','_blank');
-  win.document.write(`<!DOCTYPE html><html><head><title>Vitals Report — ${name}</title>
-  <style>
-    body{font-family:system-ui,sans-serif;font-size:12px;color:#111;margin:24px}
-    h1{font-size:18px;margin:0 0 4px}
-    .sub{font-size:12px;color:#555;margin-bottom:16px}
-    table{width:100%;border-collapse:collapse}
-    th{background:#f3f4f6;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;border:1px solid #ddd}
-    td{padding:7px 10px;border:1px solid #ddd;font-size:11px}
-    tr:nth-child(even){background:#fafafa}
-    .abn{color:#dc2626;font-weight:600}
-    .footer{margin-top:20px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px}
-    @media print{@page{margin:15mm}}
-  </style></head><body>
-  <h1>MediTrack — Vitals Report</h1>
-  <div class="sub">Patient: <b>${name}</b> &nbsp;·&nbsp; ${period} &nbsp;·&nbsp; Generated: ${now}</div>
-  ${table.outerHTML}
-  <div class="footer">Reference ranges: BP 90–140/60–90 mmHg · Pulse 50–110 bpm · Temp 96–101°F · SpO₂ ≥94% · Glucose 70–180 mg/dL</div>
-  </body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(()=>win.print(), 400);
+
+  const from   = document.getElementById('hist-date-from').value;
+  const to     = document.getElementById('hist-date-to').value;
+  const period = (from||to) ? `${from||'—'} to ${to||'—'}` : 'All dates';
+  const now    = new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'});
+
+  // Inject a temporary print-only element + hide everything else
+  const printDiv = document.createElement('div');
+  printDiv.id = 'meditrack-print-area';
+  printDiv.innerHTML = `
+    <div style="font-family:system-ui,sans-serif;font-size:13px">
+      <div style="margin-bottom:4px;font-size:18px;font-weight:700">MediTrack — Vitals Report</div>
+      <div style="font-size:12px;color:#555;margin-bottom:16px">
+        Patient: <b>${name}</b> &nbsp;·&nbsp; ${period} &nbsp;·&nbsp; Generated: ${now}
+      </div>
+      ${table.outerHTML}
+      <div style="margin-top:16px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px">
+        Reference ranges: BP 90–140/60–90 mmHg · Pulse 50–110 bpm · Temp 96–101°F · SpO₂ ≥94% · Glucose 70–180 mg/dL
+      </div>
+    </div>`;
+  document.body.appendChild(printDiv);
+
+  // Inject print CSS
+  const style = document.createElement('style');
+  style.id = 'meditrack-print-style';
+  style.textContent = `
+    @media print {
+      body > *:not(#meditrack-print-area) { display: none !important; }
+      #meditrack-print-area { display: block !important; }
+      #meditrack-print-area table { width:100%; border-collapse:collapse; font-size:11px; }
+      #meditrack-print-area th { background:#f3f4f6!important; padding:7px 8px; font-size:9px; text-transform:uppercase; border:1px solid #ccc; text-align:left; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      #meditrack-print-area td { padding:6px 8px; border:1px solid #ddd; }
+      @page { margin: 15mm; size: A4 landscape; }
+    }
+    #meditrack-print-area { display: none; }
+  `;
+  document.head.appendChild(style);
+
+  window.print();
+
+  // Cleanup after print dialog closes
+  setTimeout(()=>{
+    const el = document.getElementById('meditrack-print-area');
+    const st = document.getElementById('meditrack-print-style');
+    if(el) el.remove();
+    if(st) st.remove();
+  }, 1000);
 };
+
 
 
 // ── MODALS ─────────────────────────────────────────────────────────
