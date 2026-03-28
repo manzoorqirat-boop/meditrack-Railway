@@ -36,6 +36,7 @@
         <button class="nav-btn" data-page="history"   onclick="showPage('history')">History</button>
         <div class="nav-divider"></div>
         <button class="nav-btn" data-page="appointments" onclick="showPage('appointments')">Appointments</button>
+        <button class="nav-btn" data-page="book-appointment" onclick="showPublicBooking()">Book Appt</button>
         <span id="nav-loggedin" style="display:none">
           <button class="nav-btn" data-page="users" id="nav-users-btn" onclick="showPage('users')" style="display:none">👥 Users</button>
           <button class="nav-btn" data-page="audit" id="nav-audit-btn" onclick="showPage('audit')" style="display:none">🔍 Audit</button>
@@ -81,7 +82,7 @@
       <div style="height:.5px;background:var(--b2);margin:8px 0;"></div>
       <div class="drawer-section">Hospital</div>
       <button class="drawer-btn" data-page="appointments" onclick="showPage('appointments');closeDrawer()"><span class="d-icon">📅</span> Appointments</button>
-      <button class="drawer-btn" data-page="book-appointment" onclick="showPage('book-appointment');closeDrawer()"><span class="d-icon">➕</span> Book Appointment</button>
+      <button class="drawer-btn" data-page="book-appointment" onclick="showPublicBooking();closeDrawer()"><span class="d-icon">➕</span> Book Appointment</button>
       <div style="height:.5px;background:var(--b2);margin:8px 0;"></div>
       <div class="drawer-section">Account</div>
       <div id="drawer-loggedout">
@@ -111,7 +112,7 @@
       <button class="bnav-btn" data-page="dashboard" onclick="showPage('dashboard')"><span class="b-icon">🏠</span>Home</button>
       <button class="bnav-btn" data-page="patients"  onclick="showPage('patients')"><span class="b-icon">👤</span>Patients</button>
       <button class="bnav-btn" data-page="vitals"    onclick="showPage('vitals')"><span class="b-icon">💓</span>Vitals</button>
-      <button class="bnav-btn" data-page="appointments" onclick="showPage('appointments')"><span class="b-icon">📅</span>Appts</button>
+      <button class="bnav-btn" data-page="book-appointment" onclick="showPublicBooking()"><span class="b-icon">📅</span>Book</button>
       <button class="bnav-btn" data-page="staff"     onclick="showPage('staff')"><span class="b-icon">👨‍⚕️</span>Staff</button>
       <button class="bnav-btn" data-page="login"     onclick="showPage('login')" id="bnav-account"><span class="b-icon">🔑</span>Account</button>
     </div>
@@ -188,8 +189,7 @@
             <div class="vital-name">Blood Pressure</div>
             <div class="vital-input-wrap">
               <input class="vital-input" type="text" id="v-bp" placeholder="120/80" oninput="checkVital('bp',this.value)">
-              <span class="vital-unit">mmHg</span>
-              <span class="vitals-indicator" id="vi-bp"></span>
+              <span class="vital-unit">mmHg</span><span class="vitals-indicator" id="vi-bp"></span>
             </div>
             <div class="vitals-hint" id="vh-bp">Normal: 90–140 / 60–90</div>
           </div>
@@ -197,8 +197,7 @@
             <div class="vital-name">Pulse Rate</div>
             <div class="vital-input-wrap">
               <input class="vital-input" type="number" id="v-pulse" placeholder="72" oninput="checkVital('pulse',this.value)">
-              <span class="vital-unit">bpm</span>
-              <span class="vitals-indicator" id="vi-pulse"></span>
+              <span class="vital-unit">bpm</span><span class="vitals-indicator" id="vi-pulse"></span>
             </div>
             <div class="vitals-hint" id="vh-pulse">Normal: 60–100 bpm</div>
           </div>
@@ -206,8 +205,7 @@
             <div class="vital-name">Temperature</div>
             <div class="vital-input-wrap">
               <input class="vital-input" type="number" id="v-temp" placeholder="98.6" step="0.1" oninput="checkVital('temp',this.value)">
-              <span class="vital-unit">°F</span>
-              <span class="vitals-indicator" id="vi-temp"></span>
+              <span class="vital-unit">°F</span><span class="vitals-indicator" id="vi-temp"></span>
             </div>
             <div class="vitals-hint" id="vh-temp">Normal: 97–99°F</div>
           </div>
@@ -215,8 +213,7 @@
             <div class="vital-name">SpO₂</div>
             <div class="vital-input-wrap">
               <input class="vital-input" type="number" id="v-spo2" placeholder="98" max="100" oninput="checkVital('spo2',this.value)">
-              <span class="vital-unit">%</span>
-              <span class="vitals-indicator" id="vi-spo2"></span>
+              <span class="vital-unit">%</span><span class="vitals-indicator" id="vi-spo2"></span>
             </div>
             <div class="vitals-hint" id="vh-spo2">Normal: ≥ 95%</div>
           </div>
@@ -224,8 +221,7 @@
             <div class="vital-name">Respiratory Rate</div>
             <div class="vital-input-wrap">
               <input class="vital-input" type="number" id="v-resp" placeholder="16" oninput="checkVital('resp',this.value)">
-              <span class="vital-unit">br/min</span>
-              <span class="vitals-indicator" id="vi-resp"></span>
+              <span class="vital-unit">br/min</span><span class="vitals-indicator" id="vi-resp"></span>
             </div>
             <div class="vitals-hint" id="vh-resp">Normal: 12–20 br/min</div>
           </div>
@@ -233,8 +229,7 @@
             <div class="vital-name">Blood Glucose</div>
             <div class="vital-input-wrap">
               <input class="vital-input" type="number" id="v-glucose" placeholder="100" oninput="checkVital('glucose',this.value)">
-              <span class="vital-unit">mg/dL</span>
-              <span class="vitals-indicator" id="vi-glucose"></span>
+              <span class="vital-unit">mg/dL</span><span class="vitals-indicator" id="vi-glucose"></span>
             </div>
             <div class="vitals-hint" id="vh-glucose">Normal: 70–140 mg/dL</div>
           </div>
@@ -294,14 +289,8 @@
             <label>Patient</label>
             <select id="hist-patient"><option value="">All Patients</option></select>
           </div>
-          <div class="form-group" style="flex:1;min-width:130px">
-            <label>From Date</label>
-            <input type="date" id="hist-date-from">
-          </div>
-          <div class="form-group" style="flex:1;min-width:130px">
-            <label>To Date</label>
-            <input type="date" id="hist-date-to">
-          </div>
+          <div class="form-group" style="flex:1;min-width:130px"><label>From Date</label><input type="date" id="hist-date-from"></div>
+          <div class="form-group" style="flex:1;min-width:130px"><label>To Date</label><input type="date" id="hist-date-to"></div>
           <div class="form-group" style="flex:1;min-width:110px">
             <label>Status</label>
             <select id="hist-status">
@@ -321,7 +310,7 @@
     <div class="page" id="page-appointments">
       <div class="page-header">
         <div class="page-title">Appointments</div>
-        <button class="btn primary" onclick="showPage('book-appointment')">+ Book Appointment</button>
+        <button class="btn primary" onclick="showPublicBooking()">+ Book Appointment</button>
       </div>
       <div class="appt-grid">
         <div class="appt-stat-card"><div class="appt-stat-num" style="color:#1D9E75" id="appt-stat-today">0</div><div class="appt-stat-lbl">Today</div></div>
@@ -337,41 +326,110 @@
       <div class="card"><div id="appt-list"></div></div>
     </div>
 
-    <!-- BOOK APPOINTMENT -->
+    <!-- BOOK APPOINTMENT (public — no login required) -->
     <div class="page" id="page-book-appointment">
       <div class="page-header">
-        <div class="page-title">Book Appointment</div>
-        <button class="btn" onclick="showPage('appointments')">← Back</button>
-      </div>
-      <div class="card" style="max-width:560px">
-        <div id="appt-form-msg" class="auth-success" style="display:none"></div>
-        <div class="form-grid">
-          <div class="form-group"><label>Patient Name *</label><input id="appt-pname" placeholder="Full name"></div>
-          <div class="form-group"><label>Mobile Number *</label><input id="appt-mobile" type="tel" placeholder="+91 XXXXX XXXXX"></div>
-          <div class="form-group"><label>Age</label><input id="appt-age" type="number" placeholder="Age"></div>
-          <div class="form-group"><label>Gender</label>
-            <select id="appt-gender"><option>Male</option><option>Female</option><option>Other</option></select>
-          </div>
-          <div class="form-group"><label>Appointment Date *</label><input id="appt-date" type="date"></div>
-          <div class="form-group"><label>Appointment Time *</label><input id="appt-appttime" type="time"></div>
-          <div class="form-group"><label>Doctor</label>
-            <select id="appt-doctor"><option value="">— select doctor —</option></select>
-          </div>
-          <div class="form-group"><label>Department</label>
-            <select id="appt-dept">
-              <option value="">— select —</option>
-              <option>General Medicine</option><option>Cardiology</option><option>Orthopedics</option>
-              <option>Pediatrics</option><option>ICU</option><option>Emergency</option>
-              <option>Gynecology</option><option>Dermatology</option><option>Neurology</option>
-              <option>Ophthalmology</option><option>ENT</option><option>Psychiatry</option>
-            </select>
-          </div>
-          <div class="form-group full"><label>Reason / Chief Complaint</label><textarea id="appt-reason" placeholder="Reason for appointment..."></textarea></div>
-          <div class="form-group full"><label>Notes</label><input id="appt-notes" placeholder="Any additional notes..."></div>
+        <div>
+          <div class="page-title">Book Appointment</div>
+          <div style="font-size:12px;color:var(--t3);margin-top:2px" id="appt-hospital-name">MediTrack Hospital</div>
         </div>
-        <div style="display:flex;gap:10px;margin-top:20px">
-          <button class="btn primary" onclick="saveAppointment()">Book Appointment</button>
-          <button class="btn" onclick="showPage('appointments')">Cancel</button>
+        <button class="btn" id="appt-back-btn" onclick="showPage('appointments')" style="display:none">← Back</button>
+      </div>
+
+      <!-- STEP 1: Details -->
+      <div id="appt-step-1">
+        <div class="card" style="max-width:600px">
+          <div style="font-size:13px;font-weight:600;color:var(--t1);margin-bottom:16px">Patient Details</div>
+          <div id="appt-form-msg" class="auth-success" style="display:none"></div>
+          <div id="appt-form-err" class="auth-error" style="display:none"></div>
+          <div class="form-grid">
+            <div class="form-group"><label>Patient Name *</label><input id="appt-pname" placeholder="Full name"></div>
+            <div class="form-group"><label>Mobile Number *</label><input id="appt-mobile" type="tel" placeholder="+91 XXXXX XXXXX"></div>
+            <div class="form-group"><label>Age</label><input id="appt-age" type="number" placeholder="Age"></div>
+            <div class="form-group"><label>Gender</label>
+              <select id="appt-gender"><option>Male</option><option>Female</option><option>Other</option></select>
+            </div>
+            <div class="form-group"><label>Appointment Date *</label><input id="appt-date" type="date"></div>
+            <div class="form-group"><label>Appointment Time</label><input id="appt-appttime" type="time"></div>
+            <div class="form-group full">
+              <label>Doctor *</label>
+              <select id="appt-doctor" onchange="onDoctorSelect(this)">
+                <option value="">— select doctor —</option>
+              </select>
+            </div>
+            <div class="form-group full"><label>Reason / Chief Complaint</label><textarea id="appt-reason" placeholder="Reason for appointment..."></textarea></div>
+            <div class="form-group full"><label>Notes</label><input id="appt-notes" placeholder="Any additional notes..."></div>
+          </div>
+
+          <!-- Fee card -->
+          <div id="appt-fee-card" style="display:none;margin-top:16px;background:var(--surface2);border:1px solid var(--b1);border-radius:var(--r-md);padding:14px 16px">
+            <div style="font-size:11px;color:var(--t3);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Consultation Fee</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <div>
+                <div style="font-size:22px;font-weight:700;color:var(--t1)">₹<span id="appt-fee-display">0</span></div>
+                <div style="font-size:11px;color:var(--t3)">Min. advance (50%): <b style="color:var(--p)">₹<span id="appt-min-advance">0</span></b></div>
+              </div>
+              <div class="badge badge-info" id="appt-doctor-dept-badge"></div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+            <button class="btn primary" onclick="proceedToPayment()">Next: Payment →</button>
+            <button class="btn" id="appt-skip-payment-btn" onclick="saveAppointmentDirect()" style="display:none">Skip Payment &amp; Book</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: Payment -->
+      <div id="appt-step-2" style="display:none">
+        <div class="card" style="max-width:600px">
+          <button onclick="showApptStep(1)" style="background:none;border:none;color:var(--p);cursor:pointer;font-size:13px;padding:0;margin-bottom:16px">← Back to Details</button>
+          <div style="font-size:13px;font-weight:600;color:var(--t1);margin-bottom:4px">Advance Payment</div>
+          <div style="font-size:12px;color:var(--t3);margin-bottom:18px">Pay at least 50% of consultation fee to confirm your appointment</div>
+
+          <!-- UPI Box -->
+          <div id="appt-upi-box" style="background:linear-gradient(135deg,#0A5C47 0%,#1D9E75 100%);border-radius:var(--r-lg);padding:20px;color:#fff;margin-bottom:18px;text-align:center">
+            <div style="font-size:11px;opacity:.75;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">Pay via UPI</div>
+            <div style="font-size:24px;font-weight:700;margin-bottom:4px">₹<span id="pay-amount-display">0</span></div>
+            <div style="font-size:13px;opacity:.85;margin-bottom:14px">Minimum advance (50% of consultation fee)</div>
+            <div style="background:rgba(255,255,255,.15);border-radius:var(--r-md);padding:10px 14px;margin-bottom:14px">
+              <div style="font-size:10px;opacity:.7;margin-bottom:4px">UPI ID</div>
+              <div style="font-size:16px;font-weight:600;letter-spacing:.02em" id="pay-upi-id-display">—</div>
+            </div>
+            <a id="pay-upi-link" href="#"
+              style="display:inline-block;background:#fff;color:#0A5C47;font-weight:700;font-size:14px;padding:10px 24px;border-radius:var(--r-md);text-decoration:none;cursor:pointer">
+              Open UPI App →</a>
+            <div style="font-size:10px;opacity:.65;margin-top:8px">Works with PhonePe, Google Pay, Paytm &amp; all UPI apps</div>
+          </div>
+
+          <div class="form-group" style="margin-bottom:16px">
+            <label>UPI Transaction / UTR Reference Number *</label>
+            <input id="appt-payment-ref" type="text" placeholder="e.g. 408123456789" autocomplete="off"
+              style="font-family:monospace;font-size:15px;letter-spacing:.05em">
+            <div class="hint">Enter the 12-digit UTR number shown in your UPI app after payment</div>
+          </div>
+          <div class="form-group" style="margin-bottom:20px">
+            <label>Amount Paid (₹) *</label>
+            <input id="appt-paid-amount" type="number" placeholder="Enter amount paid">
+            <div class="hint" id="appt-paid-hint"></div>
+          </div>
+
+          <div id="appt-pay-err" class="auth-error" style="display:none;margin-bottom:14px"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn primary" onclick="saveAppointmentWithPayment()">Confirm Booking →</button>
+            <button class="btn" onclick="saveAppointmentDirect()">Book Without Payment</button>
+          </div>
+          <div style="font-size:11px;color:var(--t3);margin-top:10px">Payment will be verified at the hospital reception on the day of appointment.</div>
+        </div>
+      </div>
+
+      <!-- STEP 3: Confirmation -->
+      <div id="appt-step-3" style="display:none">
+        <div class="card" style="max-width:600px;text-align:center;padding:32px 24px">
+          <div style="font-size:48px;margin-bottom:12px">✅</div>
+          <div style="font-size:20px;font-weight:700;color:var(--t1);margin-bottom:8px">Appointment Confirmed!</div>
+          <div id="appt-confirm-details" style="font-size:13px;color:var(--t2);line-height:1.8;margin-bottom:24px"></div>
+          <button class="btn primary" onclick="showPublicBooking()">Book Another Appointment</button>
         </div>
       </div>
     </div>
@@ -396,9 +454,7 @@
             </div>
           </div>
           <button class="btn primary" style="width:100%" onclick="doLogin()">Login →</button>
-          <div class="auth-footer">
-            <a onclick="showPage('forgot-password')">Forgot password?</a>
-          </div>
+          <div class="auth-footer"><a onclick="showPage('forgot-password')">Forgot password?</a></div>
         </div>
       </div>
     </div>
@@ -416,12 +472,9 @@
           <div class="form-group"><label>Full Name *</label><input id="cu-name" placeholder="e.g. Dr. Aisha Khan"></div>
           <div class="form-group"><label>Role *</label>
             <select id="cu-role">
-              <option value="doctor">Doctor</option>
-              <option value="nurse">Nurse</option>
-              <option value="staff">Other Staff</option>
-              <option value="receptionist">Receptionist</option>
-              <option value="pharmacist">Pharmacist</option>
-              <option value="admin">Admin</option>
+              <option value="doctor">Doctor</option><option value="nurse">Nurse</option>
+              <option value="staff">Other Staff</option><option value="receptionist">Receptionist</option>
+              <option value="pharmacist">Pharmacist</option><option value="admin">Admin</option>
             </select>
           </div>
           <div class="form-group"><label>Username *</label><input id="cu-username" type="text" placeholder="e.g. dr.aisha" autocomplete="off"></div>
@@ -436,6 +489,7 @@
             </select>
           </div>
           <div class="form-group"><label>Qualification</label><input id="cu-qual" placeholder="e.g. MBBS, MD (optional)"></div>
+          <div class="form-group"><label>Consultation Fee (₹)</label><input id="cu-fee" type="number" placeholder="0 (for doctors)"></div>
           <div class="form-group"><label>Temporary Password *</label>
             <div class="input-password-wrap">
               <input id="cu-pw" type="password" placeholder="Min 8 characters" oninput="checkStrength(this.value,'cu-strength-fill','cu-strength-label')">
@@ -452,7 +506,7 @@
       </div>
       <div class="card" style="overflow-x:auto">
         <table class="data-table" id="users-table">
-                    <thead><tr>
+          <thead><tr>
             <th>Name</th><th>Role</th><th>Username</th><th>Email</th><th>Department</th><th>Created</th><th>Status</th>
           </tr></thead>
           <tbody id="users-tbody">
@@ -519,7 +573,7 @@
       </div>
     </div>
 
-    <!-- AUDIT TRAIL (admin only) -->
+    <!-- AUDIT TRAIL -->
     <div class="page" id="page-audit">
       <div class="page-header">
         <div>
@@ -540,8 +594,7 @@
             <select id="af-event" onchange="loadAudit(1)">
               <option value="">All Events</option>
               <option>LOGIN</option><option>LOGIN_FAILED</option><option>LOGOUT</option>
-              <option>PATIENT_ADMITTED</option><option>PATIENT_UPDATED</option>
-              <option>PATIENT_DISCHARGED</option><option>PATIENT_DELETED</option>
+              <option>PATIENT_ADMITTED</option><option>PATIENT_UPDATED</option><option>PATIENT_DISCHARGED</option><option>PATIENT_DELETED</option>
               <option>VITALS_RECORDED</option>
               <option>STAFF_ADDED</option><option>STAFF_UPDATED</option><option>STAFF_REMOVED</option>
               <option>WARD_CREATED</option><option>WARD_UPDATED</option><option>WARD_DELETED</option>
@@ -658,11 +711,7 @@
     <div class="form-grid" style="grid-template-columns:1fr">
       <div class="form-group"><label>Full Name *</label><input id="st-name" placeholder="e.g. Dr. Ramesh Kumar"></div>
       <div class="form-group"><label>Role *</label>
-        <select id="st-role">
-          <option value="doctor">Doctor</option>
-          <option value="nurse">Nurse</option>
-          <option value="staff">Other Staff</option>
-        </select>
+        <select id="st-role"><option value="doctor">Doctor</option><option value="nurse">Nurse</option><option value="staff">Other Staff</option></select>
       </div>
       <div class="form-group"><label>Department / Specialisation</label><input id="st-dept" placeholder="e.g. Cardiology, ICU"></div>
       <div class="form-group"><label>Qualification</label><input id="st-qual" placeholder="e.g. MBBS MD, GNM"></div>
@@ -702,9 +751,8 @@
 <script src="app.js" type="module"></script>
 <script>
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.getRegistrations().then(regs => {
-    regs.forEach(r => r.unregister());
-  });
+  navigator.serviceWorker.getRegistrations().then(regs => { regs.forEach(r => r.unregister()); });
+  caches.keys().then(keys => { keys.forEach(k => caches.delete(k)); });
 }
 </script>
 </body>
