@@ -6,6 +6,7 @@ window._wards     = [];
 window._editingPatientId = null;
 window._editingStaffId   = null;
 window._patientFilter    = 'all';
+window._patientSearch    = '';
 
 // ── HELPERS ────────────────────────────────────────────────────────
 function ini(n){ return (n||'?').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(); }
@@ -38,7 +39,7 @@ window.showPage=function(id){
   if(pg) pg.classList.add('active');
   document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
   if     (id==='dashboard')        renderDashboard();
-  else if(id==='patients')         renderPatients(window._patientFilter);
+  else if(id==='patients')         { window._patientSearch=''; const si=document.getElementById('patient-search'); if(si) si.value=''; renderPatients(window._patientFilter); }
   else if(id==='vitals')           { populatePatientSelect(); refreshNurseSelect(); }
   else if(id==='wards')            { stopVitalsClock(); renderWards(); }
   else if(id==='staff')            { stopVitalsClock(); renderStaffPage(); }
@@ -46,6 +47,7 @@ window.showPage=function(id){
   else if(id==='appointments')     { stopVitalsClock(); renderAppointments(); }
   else if(id==='book-appointment') { stopVitalsClock(); initBookAppt(); }
   else if(id==='change-password')  { stopVitalsClock(); renderChangePassword(); }
+  else if(id==='audit')            { stopVitalsClock(); loadAuditStats(); loadAudit(1); }
   else if(id==='login')            { stopVitalsClock(); resetLoginForm(); }
 };
 
@@ -56,11 +58,14 @@ window.closeDrawer=function(){ document.getElementById('drawer').classList.remov
 async function api(method, path, body){
   setSyncStatus('saving','Saving…');
   try{
+    const token = localStorage.getItem('meditrack_token') || '';
     const res = await fetch(path,{
-      method, headers:{'Content-Type':'application/json'},
+      method,
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
       body: body ? JSON.stringify(body) : undefined
     });
     const json = await res.json();
+    if(res.status === 401){ window.logoutUser(); return; }
     if(!json.ok) throw new Error(json.error||'Request failed');
     setSyncStatus('live','Live · PostgreSQL');
     return json.data;
@@ -89,7 +94,11 @@ async function loadAll(){
     setSyncStatus('live','Live · PostgreSQL');
     hideLoading();
     renderDashboard();
-  } catch(e){ setSyncStatus('offline','Load failed'); hideLoading(); }
+  } catch(e){
+    setSyncStatus('offline','Load failed');
+    hideLoading();
+    if(e.message && (e.message.includes('401')||e.message.includes('Authentication'))){ showPage('login'); }
+  }
 }
 
 // Normalize snake_case from DB → camelCase used in UI
@@ -133,17 +142,36 @@ function renderDashboard(){
 
 // ── PATIENTS ───────────────────────────────────────────────────────
 function renderPatients(filter){
-  window._patientFilter=filter;
-  let list=window._patients;
+  window._patientFilter = filter || 'all';
+  const search = (window._patientSearch||'').toLowerCase().trim();
+  let list = window._patients;
   if(filter==='admitted')   list=list.filter(p=>p.status==='admitted');
   if(filter==='discharged') list=list.filter(p=>p.status==='discharged');
-  document.getElementById('patient-list').innerHTML=list.length?list.map(p=>{
+  if(search){
+    list=list.filter(p=>{
+      const ward=getWard(p.wardId);
+      return [p.name,p.doctor,p.diagnosis,p.allergies,p.contact,p.blood,ward?ward.name:''].join(' ').toLowerCase().includes(search);
+    });
+  }
+  const countEl=document.getElementById('patient-count');
+  if(countEl) countEl.textContent=(search||filter!=='all')?`${list.length} result${list.length!==1?'s':''}` :'';
+  const el=document.getElementById('patient-list'); if(!el) return;
+  if(!list.length){
+    el.innerHTML=`<div class="empty-state">${search?`No patients match "<b>${search}</b>". <a href="#" onclick="window._patientSearch='';document.getElementById('patient-search').value='';renderPatients(window._patientFilter);return false">Clear</a>`:'No patients found.'}</div>`;
+    return;
+  }
+  el.innerHTML=list.map(p=>{
     const ward=getWard(p.wardId);
-    return `<div class="patient-row"><div class="patient-info"><div class="avatar">${ini(p.name)}</div><div><div class="patient-name">${p.name}</div><div class="patient-meta">${p.age||''}y · ${p.gender||''} · ${p.blood||''} · ${ward?ward.name:'—'} · ${p.doctor||'—'}</div><div class="patient-meta" style="margin-top:2px">${p.diagnosis||''}</div></div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${statusBadge(p)}<button class="btn sm" onclick="editPatient('${p.id}')">Edit</button><button class="btn sm" onclick="logVitalsFor('${p.id}')">Log Vitals</button>${p.status==='admitted'?`<button class="btn sm" onclick="dischargePatient('${p.id}')">Discharge</button>`:''}</div></div>`;
-  }).join(''):'<div class="empty-state">No patients found.</div>';
+    let displayName=p.name;
+    if(search&&p.name.toLowerCase().includes(search)){
+      const i=p.name.toLowerCase().indexOf(search);
+      displayName=p.name.slice(0,i)+`<mark style="background:#FEF08A;border-radius:2px;padding:0 1px">${p.name.slice(i,i+search.length)}</mark>`+p.name.slice(i+search.length);
+    }
+    return `<div class="patient-row"><div class="patient-info"><div class="avatar">${ini(p.name)}</div><div><div class="patient-name">${displayName}</div><div class="patient-meta">${p.age||''}y · ${p.gender||''} · ${p.blood||''} · ${ward?ward.name:'—'} · ${p.doctor||'—'}</div><div class="patient-meta" style="margin-top:2px">${p.diagnosis||''}</div></div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${statusBadge(p)}<button class="btn sm" onclick="editPatient('${p.id}')">Edit</button><button class="btn sm" onclick="logVitalsFor('${p.id}')">Log Vitals</button>${p.status==='admitted'?`<button class="btn sm" onclick="dischargePatient('${p.id}')">Discharge</button>`:''}</div></div>`;
+  }).join('');
 }
 
-window.filterPatients=function(f,el){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); el.classList.add('active'); renderPatients(f); };
+window.filterPatients=function(f,el){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); if(el) el.classList.add('active'); renderPatients(f); };
 
 function refreshDoctorSelect(selected){
   const el=document.getElementById('p-doctor'); if(!el) return;
@@ -158,7 +186,6 @@ window.openAddPatient=function(){
   document.getElementById('modal-patient-title').textContent='Add New Patient';
   ['p-name','p-age','p-contact','p-diagnosis','p-allergies'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('p-admit').value=new Date().toISOString().split('T')[0];
-  // ward select
   document.getElementById('p-ward').innerHTML='<option value="">— no ward —</option>'+window._wards.map(w=>`<option value="${w.id}">${w.name}</option>`).join('');
   refreshDoctorSelect();
   document.getElementById('modal-patient').classList.add('open');
@@ -194,18 +221,6 @@ window.savePatient=async function(){
     if(idx>-1) window._patients[idx]=data; else window._patients.push(data);
     renderPatients(window._patientFilter);
   }catch(e){ alert('Save failed: '+e.message); }
-};
-
-window.dischargePatient=async function(id){
-  const p=getPatient(id); if(!p) return;
-  if(!confirm('Mark '+p.name+' as discharged?')) return;
-  const updated={...p,status:'discharged',dischargeDate:new Date().toISOString()};
-  try{
-    await api('POST','/api/patients',updated);
-    const idx=window._patients.findIndex(x=>x.id===id);
-    if(idx>-1) window._patients[idx]=updated;
-    renderPatients(window._patientFilter);
-  }catch(e){ alert('Failed: '+e.message); }
 };
 
 // ── VITALS ─────────────────────────────────────────────────────────
@@ -265,6 +280,11 @@ window.clearVitalsForm=function(){
   ['v-bp','v-pulse','v-temp','v-spo2','v-resp','v-glucose','v-notes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('v-pain').value=0; document.getElementById('pain-out').textContent='0';
   document.getElementById('v-nurse').value='';
+  ['bp','pulse','temp','spo2','resp','glucose'].forEach(f=>{
+    const input=document.getElementById('v-'+f); if(input) input.classList.remove('vi-normal','vi-warn','vi-critical');
+    const ind=document.getElementById('vi-'+f); if(ind) ind.textContent='';
+    const hint=document.getElementById('vh-'+f); if(hint){ hint.className='vitals-hint'; hint.textContent=''; }
+  });
 };
 
 // ── WARDS ──────────────────────────────────────────────────────────
@@ -297,24 +317,12 @@ window.saveWard=async function(){
 function renderStaffPage(){
   const doctors=window._staff.filter(s=>s.role==='doctor');
   const nurses=window._staff.filter(s=>s.role!=='doctor');
-
   function card(s){
     const avcls=s.role==='doctor'?'doctor':s.role==='nurse'?'nurse':'other';
     const bdg=s.role==='doctor'?'<span class="badge badge-info">Doctor</span>':s.role==='nurse'?'<span class="badge badge-ok">Nurse</span>':'<span class="badge badge-purple">Staff</span>';
     const sub=[s.qual,s.dept].filter(Boolean).join(' · ')||'—';
-    return `<div class="staff-card">
-      <div class="staff-card-top">
-        <div class="staff-av ${avcls}">${ini(s.name)}</div>
-        <div><div class="staff-nm">${s.name}</div><div class="staff-sub">${sub}</div></div>
-      </div>
-      <div class="staff-row2">${bdg}<span class="staff-contact">${s.contact||''}</span></div>
-      <div class="staff-acts">
-        <button class="btn sm" onclick="openEditStaff('${s.id}')">Edit</button>
-        <button class="btn sm danger" onclick="removeStaff('${s.id}','${(s.name||'').replace(/'/g,'')}')">Remove</button>
-      </div>
-    </div>`;
+    return `<div class="staff-card"><div class="staff-card-top"><div class="staff-av ${avcls}">${ini(s.name)}</div><div><div class="staff-nm">${s.name}</div><div class="staff-sub">${sub}</div></div></div><div class="staff-row2">${bdg}<span class="staff-contact">${s.contact||''}</span></div><div class="staff-acts"><button class="btn sm" onclick="openEditStaff('${s.id}')">Edit</button><button class="btn sm danger" onclick="removeStaff('${s.id}','${(s.name||'').replace(/'/g,'')}')">Remove</button></div></div>`;
   }
-
   const dEl=document.getElementById('staff-grid-doctors');
   const nEl=document.getElementById('staff-grid-nurses');
   if(dEl) dEl.innerHTML=doctors.length?doctors.map(card).join(''):'<div class="staff-empty">No doctors added yet. Add a user with the Doctor role to see them here.</div>';
@@ -355,13 +363,16 @@ window.saveStaff=async function(){
   }catch(e){ alert('Save failed: '+e.message); }
 };
 
-window.removeStaff=async function(id,name){
-  if(!confirm('Remove '+name+' from staff list?')) return;
-  try{
-    await api('DELETE','/api/staff/'+id);
-    window._staff=window._staff.filter(s=>s.id!==id);
-    renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
-  }catch(e){ alert('Failed: '+e.message); }
+window.removeStaff=function(id,name){
+  confirmDelete({
+    record:name, message:'This staff member will be permanently removed.',
+    requireType:'DELETE',
+    onConfirm:async()=>{
+      await api('DELETE','/api/staff/'+id);
+      window._staff=window._staff.filter(s=>s.id!==id);
+      renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
+    }
+  });
 };
 
 // ── HISTORY / REPORT ───────────────────────────────────────────────
@@ -378,7 +389,7 @@ window.clearHistFilter=function(){
   renderHistory();
 };
 
-window.renderHistory = async function(){
+window.renderHistory=async function(){
   const pid    = document.getElementById('hist-patient').value;
   const from   = document.getElementById('hist-date-from').value;
   const to     = document.getElementById('hist-date-to').value;
@@ -388,19 +399,14 @@ window.renderHistory = async function(){
   container.innerHTML = '<div class="card"><div class="empty-state">Loading…</div></div>';
 
   const params = new URLSearchParams({ page, limit:100 });
-  if (pid)  params.set('patientId', pid);
-  if (from) params.set('from', from);
-  if (to)   params.set('to', to);
-    if (status === 'abnormal') params.set('abnormal','true');
-  // 'normal' filtered client-side after fetch
+  if(pid)  params.set('patientId', pid);
+  if(from) params.set('from', from);
+  if(to)   params.set('to', to);
+  if(status==='abnormal') params.set('abnormal','true');
 
-  try {
-    const token = localStorage.getItem('meditrack_token') || '';
-    const res   = await fetch('/api/vitals/history?'+params.toString(),
-      { headers:{ 'Authorization':'Bearer '+token } });
-    const json  = await res.json();
-    if (!json.ok) throw new Error(json.error);
-    const { entries, total, pages } = json.data;
+  try{
+    const data = await api('GET','/api/vitals/history?'+params.toString());
+    const { entries, total, pages } = data;
 
     const logs = entries.map(r => {
       const l = normalizeVital(r);
@@ -409,12 +415,13 @@ window.renderHistory = async function(){
       return {...l,_abnormal:as||ap||at||ag,_as:as,_ap:ap,_at:at,_ag:ag};
     });
 
-        const filtered = status==='normal' ? logs.filter(l=>!l._abnormal) : logs;
-    if (!filtered.length) {
+    const filtered = status==='normal' ? logs.filter(l=>!l._abnormal) : logs;
+    if(!filtered.length){
       container.innerHTML='<div class="card"><div class="empty-state">No vitals records match.</div></div>';
       return;
     }
-        const rows = filtered.map(l => {
+
+    const rows = filtered.map(l => {
       const p=getPatient(l.patientId);
       const t=l.time?new Date(l.time).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'}):'—';
       return `<div class="history-row${l._abnormal?' rpt-row-abnormal':''}">
@@ -438,178 +445,22 @@ window.renderHistory = async function(){
         </div>
       </div>` : '';
     container.innerHTML=`<div class="card">${rows}${pgHtml}</div>`;
-  } catch(e) {
+  } catch(e){
     container.innerHTML=`<div class="card"><div class="empty-state" style="color:#c0392b">Failed: ${e.message}</div></div>`;
   }
 };
-  // Annotate abnormal flags
-  logs = logs.map(l => {
-    const as = parseFloat(l.spo2) < 94;
-    const ap = parseFloat(l.pulse) > 110 || parseFloat(l.pulse) < 50;
-    const at = parseFloat(l.temp) > 101  || parseFloat(l.temp) < 96;
-    const ag = parseFloat(l.glucose) > 180 || parseFloat(l.glucose) < 70;
-    return {...l, _abnormal: as||ap||at||ag, _as:as, _ap:ap, _at:at, _ag:ag};
-  });
-
-  if(status === 'abnormal') logs = logs.filter(l => l._abnormal);
-  if(status === 'normal')   logs = logs.filter(l => !l._abnormal);
-
-  const container = document.getElementById('history-list');
-  if(!logs.length){
-    container.innerHTML = `<div class="card"><div class="empty-state">No vitals records match the current filter.</div></div>`;
-    return;
-  }
-
-  // Summary stats
-  const total     = logs.length;
-  const abnCount  = logs.filter(l => l._abnormal).length;
-  const normCount = total - abnCount;
-  const uniquePts = [...new Set(logs.map(l => l.patientId))].length;
-
-  // Determine report scope label
-  const selPt   = window._patients.find(p => p.id === pid);
-  const scopeLbl = selPt ? selPt.name : 'All Patients';
-  const fromLbl  = from  ? new Date(from).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
-  const toLbl    = to    ? new Date(to).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
-  const now      = new Date().toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-
-  // Group logs by patient → by date
-  const grouped = {};
-  logs.forEach(l => {
-    const p   = getPatient(l.patientId);
-    const key = l.patientId || 'unknown';
-    if(!grouped[key]) grouped[key] = { patient: p, logs: [] };
-    grouped[key].logs.push(l);
-  });
-
-  let html = `
-  <div id="report-doc">
-    <!-- REPORT HEADER -->
-    <div class="rpt-header">
-      <div class="rpt-logo-row">
-        <div class="rpt-logo-icon"><div class="logo-cross"></div></div>
-        <div>
-          <div class="rpt-hospital">MediTrack Hospital Management</div>
-          <div class="rpt-sub">Patient Vitals History Report</div>
-        </div>
-        <div class="rpt-meta-box">
-          <div class="rpt-meta-row"><span>Generated</span><span>${now}</span></div>
-          <div class="rpt-meta-row"><span>Patient</span><span>${scopeLbl}</span></div>
-          <div class="rpt-meta-row"><span>Period</span><span>${fromLbl} – ${toLbl}</span></div>
-        </div>
-      </div>
-      <div class="rpt-divider"></div>
-      <!-- Summary strip -->
-      <div class="rpt-summary-row">
-        <div class="rpt-sum-box">
-          <div class="rpt-sum-num">${total}</div>
-          <div class="rpt-sum-lbl">Total Records</div>
-        </div>
-        <div class="rpt-sum-box">
-          <div class="rpt-sum-num" style="color:var(--ok)">${normCount}</div>
-          <div class="rpt-sum-lbl">Normal</div>
-        </div>
-        <div class="rpt-sum-box">
-          <div class="rpt-sum-num" style="color:var(--danger)">${abnCount}</div>
-          <div class="rpt-sum-lbl">Abnormal</div>
-        </div>
-        <div class="rpt-sum-box">
-          <div class="rpt-sum-num">${uniquePts}</div>
-          <div class="rpt-sum-lbl">Patient${uniquePts!==1?'s':''}</div>
-        </div>
-      </div>
-    </div>`;
-
-  // Per-patient sections
-  Object.values(grouped).forEach(({patient: pt, logs: ptLogs}) => {
-    const ptName  = pt ? pt.name : 'Unknown Patient';
-    const ptMeta  = pt ? [pt.age?pt.age+'y':'', pt.gender||'', pt.blood||'', pt.doctor?'Dr. '+pt.doctor:''].filter(Boolean).join(' · ') : '';
-    const ptAbnorm= ptLogs.filter(l=>l._abnormal).length;
-
-    html += `
-    <div class="rpt-patient-section">
-      <div class="rpt-patient-header">
-        <div class="rpt-patient-av">${ini(ptName)}</div>
-        <div>
-          <div class="rpt-patient-name">${ptName}</div>
-          ${ptMeta ? `<div class="rpt-patient-meta">${ptMeta}</div>` : ''}
-        </div>
-        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-          <span class="badge badge-ok">${ptLogs.length - ptAbnorm} Normal</span>
-          ${ptAbnorm ? `<span class="badge badge-danger">${ptAbnorm} Abnormal</span>` : ''}
-        </div>
-      </div>
-
-      <!-- Vitals table -->
-      <div class="rpt-table-wrap">
-        <table class="rpt-table">
-          <thead>
-            <tr>
-              <th>Date &amp; Time</th>
-              <th>BP<br><span class="rpt-unit">mmHg</span></th>
-              <th>Pulse<br><span class="rpt-unit">bpm</span></th>
-              <th>Temp<br><span class="rpt-unit">°F</span></th>
-              <th>SpO2<br><span class="rpt-unit">%</span></th>
-              <th>RR<br><span class="rpt-unit">/min</span></th>
-              <th>Glucose<br><span class="rpt-unit">mg/dL</span></th>
-              <th>Pain<br><span class="rpt-unit">/10</span></th>
-              <th>Recorded By</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>`;
-
-    ptLogs.forEach(l => {
-      const t = l.time ? new Date(l.time).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
-      html += `
-            <tr class="${l._abnormal ? 'rpt-row-abnormal' : ''}">
-              <td class="rpt-td-time">${t}</td>
-              <td>${l.bp||'—'}</td>
-              <td class="${l._ap?'rpt-cell-warn':''}">${l.pulse||'—'}</td>
-              <td class="${l._at?'rpt-cell-warn':''}">${l.temp||'—'}</td>
-              <td class="${l._as?'rpt-cell-warn':''}">${l.spo2||'—'}</td>
-              <td>${l.resp||'—'}</td>
-              <td class="${l._ag?'rpt-cell-warn':''}">${l.glucose||'—'}</td>
-              <td>${l.pain||'—'}</td>
-              <td>${l.nurse||'—'}</td>
-              <td>${l._abnormal
-                ? '<span class="badge badge-danger">Abnormal</span>'
-                : '<span class="badge badge-ok">Normal</span>'}</td>
-            </tr>
-            ${l.notes ? `<tr class="rpt-notes-row"><td colspan="10"><span class="rpt-notes-label">Notes:</span> ${l.notes}</td></tr>` : ''}`;
-    });
-
-    html += `
-          </tbody>
-        </table>
-      </div>
-    </div>`;
-  });
-
-  html += `
-    <!-- REPORT FOOTER -->
-    <div class="rpt-footer">
-      <div>This report is computer-generated by MediTrack Hospital Management System.</div>
-      <div>Reference ranges: BP 90–140/60–90 mmHg · Pulse 50–110 bpm · Temp 96–101°F · SpO2 ≥94% · Glucose 70–180 mg/dL</div>
-    </div>
-  </div>`;
-
-  container.innerHTML = html;
-};
 
 window.printReport=function(){
-  // Re-render with current filters first, then print
-  renderHistory();
-  const el = document.getElementById('report-doc');
-  if(!el){ alert('No report to print. Apply filters first.'); return; }
   window.print();
 };
 
 // ── MODALS ─────────────────────────────────────────────────────────
 window.closeModal=function(id){ document.getElementById(id).classList.remove('open'); };
-document.querySelectorAll('.modal-backdrop').forEach(b=>{ b.addEventListener('click',e=>{ if(e.target===b) b.classList.remove('open'); }); });
-window.openSetup=function(){}; // Firebase removed - using Railway PostgreSQL
-window.closeSetup=function(){ document.getElementById('setup-modal').classList.remove('open'); };
+document.querySelectorAll('.modal-backdrop').forEach(b=>{
+  b.addEventListener('click',e=>{ if(e.target===b) b.classList.remove('open'); });
+});
+window.openSetup=function(){};
+window.closeSetup=function(){};
 
 // ── APPOINTMENTS ──────────────────────────────────────────────────
 window._appointments = [];
@@ -629,7 +480,7 @@ function initBookAppt(){
   document.getElementById('appt-age').value='';
   document.getElementById('appt-appttime').value='';
   const msg=document.getElementById('appt-form-msg');
-  if(msg){msg.style.display='none';}
+  if(msg) msg.style.display='none';
 }
 
 function renderAppointments(filter){
@@ -641,24 +492,17 @@ function renderAppointments(filter){
   document.getElementById('appt-stat-today').textContent=todayList.length;
   document.getElementById('appt-stat-upcoming').textContent=upcoming.length;
   document.getElementById('appt-stat-total').textContent=list.length;
-  if(window._apptFilter==='today')     list=todayList;
-  else if(window._apptFilter==='upcoming')  list=upcoming;
-  else if(window._apptFilter==='completed') list=list.filter(a=>a.status==='completed');
+  if(window._apptFilter==='today')      list=todayList;
+  else if(window._apptFilter==='upcoming')   list=upcoming;
+  else if(window._apptFilter==='completed')  list=list.filter(a=>a.status==='completed');
   document.getElementById('appt-list').innerHTML=list.length?list.map(a=>{
     const dLabel=a.date===today?'Today':a.date;
     const sBadge=a.status==='completed'?'<span class="badge badge-ok">Completed</span>':a.date<today?'<span class="badge badge-gray">Past</span>':a.date===today?'<span class="badge badge-warn">Today</span>':'<span class="badge badge-info">Upcoming</span>';
-    return `<div class="appt-row">
-      <div class="appt-info">
-        <div><div class="appt-time">${a.time||'—'}</div><div style="font-size:10px;color:var(--text-2)">${dLabel}</div></div>
-        <div class="avatar">${ini(a.patientName)}</div>
-        <div><div class="appt-name">${a.patientName}</div><div class="appt-meta">${a.doctor?'Dr. '+a.doctor:'—'} · ${a.dept||'—'}</div><div class="appt-meta">${a.reason||''}</div></div>
-      </div>
-      <div class="appt-actions">${sBadge}${a.status!=='completed'?`<button class="btn sm" onclick="markApptDone('${a.id}')">Done</button>`:''}<button class="btn sm danger" onclick="deleteAppt('${a.id}')">✕</button></div>
-    </div>`;
+    return `<div class="appt-row"><div class="appt-info"><div><div class="appt-time">${a.time||'—'}</div><div style="font-size:10px;color:var(--text-2)">${dLabel}</div></div><div class="avatar">${ini(a.patientName)}</div><div><div class="appt-name">${a.patientName}</div><div class="appt-meta">${a.doctor?'Dr. '+a.doctor:'—'} · ${a.dept||'—'}</div><div class="appt-meta">${a.reason||''}</div></div></div><div class="appt-actions">${sBadge}${a.status!=='completed'?`<button class="btn sm" onclick="markApptDone('${a.id}')">Done</button>`:''}<button class="btn sm danger" onclick="deleteAppt('${a.id}')">✕</button></div></div>`;
   }).join(''):'<div class="empty-state">No appointments found.</div>';
 }
 
-window.filterAppts=function(f,el){ document.querySelectorAll('#page-appointments .tab').forEach(t=>t.classList.remove('active')); el.classList.add('active'); renderAppointments(f); };
+window.filterAppts=function(f,el){ document.querySelectorAll('#page-appointments .tab').forEach(t=>t.classList.remove('active')); if(el) el.classList.add('active'); renderAppointments(f); };
 
 window.saveAppointment=async function(){
   const name=document.getElementById('appt-pname').value.trim();
@@ -684,12 +528,19 @@ window.markApptDone=async function(id){
   }catch(e){ alert('Failed: '+e.message); }
 };
 
-window.deleteAppt=async function(id){
-  if(!confirm('Remove this appointment?')) return;
-  try{
-    await api('DELETE','/api/appointments/'+id);
-    window._appointments=window._appointments.filter(a=>a.id!==id); renderAppointments();
-  }catch(e){ alert('Failed: '+e.message); }
+window.deleteAppt=function(id){
+  const a=window._appointments.find(x=>x.id===id);
+  confirmDelete({
+    icon:'📅', title:'Cancel appointment?',
+    record:a?`${a.patientName} — ${a.date}`:id,
+    message:'This appointment will be permanently removed.',
+    btnLabel:'Cancel Appointment',
+    onConfirm:async()=>{
+      await api('DELETE','/api/appointments/'+id);
+      window._appointments=window._appointments.filter(x=>x.id!==id);
+      renderAppointments();
+    }
+  });
 };
 
 // ── ACCOUNT / AUTH ─────────────────────────────────────────────────
@@ -703,12 +554,14 @@ function updateAuthUI(){
   document.getElementById('nav-loggedout').style.display=loggedIn?'none':'inline-flex';
   document.getElementById('drawer-loggedin').style.display=loggedIn?'block':'none';
   document.getElementById('drawer-loggedout').style.display=loggedIn?'none':'block';
-  // Show Users nav only for admin
   const navUsersBtn=document.getElementById('nav-users-btn');
   if(navUsersBtn) navUsersBtn.style.display=isAdmin?'inline-flex':'none';
   const drawerUsersBtn=document.getElementById('drawer-users-btn');
   if(drawerUsersBtn) drawerUsersBtn.style.display=isAdmin?'flex':'none';
-  // Bottom nav account btn
+  const navAuditBtn=document.getElementById('nav-audit-btn');
+  if(navAuditBtn) navAuditBtn.style.display=isAdmin?'inline-block':'none';
+  const drawerAuditBtn=document.getElementById('drawer-audit-btn');
+  if(drawerAuditBtn) drawerAuditBtn.style.display=isAdmin?'block':'none';
   const bnavAcc=document.getElementById('bnav-account');
   if(bnavAcc){ bnavAcc.innerHTML=loggedIn?'<span class="b-icon">👤</span>Account':'<span class="b-icon">🔑</span>Login'; }
   if(loggedIn){
@@ -718,7 +571,6 @@ function updateAuthUI(){
     document.getElementById('user-av-drawer').textContent=av;
     document.getElementById('user-name-drawer').textContent=u.name;
     document.getElementById('user-role-drawer').textContent=u.role||'';
-    if(isAdmin) loadUsers();
   }
 }
 
@@ -754,6 +606,14 @@ window.checkStrength=function(pw,fillId,labelId){
   fill.style.width=(score*25)+'%'; fill.style.background=clr; label.textContent=lbl;
 };
 
+function renderChangePassword(){
+  const loggedIn=!!window._currentUser;
+  const ls=document.getElementById('chpw-loggedin-section');
+  const lo=document.getElementById('chpw-loggedout-section');
+  if(ls) ls.style.display=loggedIn?'block':'none';
+  if(lo) lo.style.display=loggedIn?'none':'block';
+}
+
 // ── USER MANAGEMENT (admin only) ───────────────────────────────────
 window.openCreateUser=function(){
   document.getElementById('create-user-card').style.display='block';
@@ -776,17 +636,14 @@ window.submitCreateUser=async function(){
   const dept=document.getElementById('cu-dept').value;
   const qual=document.getElementById('cu-qual').value.trim();
   const pw=document.getElementById('cu-pw').value;
-  const adminPw=document.getElementById('cu-admin-pw').value;
-  if(!name||!username||!pw||!adminPw){ errEl.textContent='Name, username, password and your admin password are required.'; errEl.style.display='block'; return; }
+  if(!name||!username||!pw){ errEl.textContent='Name, username and password are required.'; errEl.style.display='block'; return; }
   if(pw.length<8){ errEl.textContent='Password must be at least 8 characters.'; errEl.style.display='block'; return; }
   if(!window._currentUser){ errEl.textContent='You are not logged in.'; errEl.style.display='block'; return; }
   try{
-    const newUser = await api('POST','/api/accounts',{
+    await api('POST','/api/accounts',{
       id:'u'+Date.now(), name, role, username, email, mobile, dept, qual,
-      pw, adminUsername:window._currentUser.username, adminPw,
-      createdAt:new Date().toISOString()
+      pw, createdAt:new Date().toISOString()
     });
-    // Auto-sync to staff list
     if(role==='doctor'||role==='nurse'||role==='staff'||role==='pharmacist'){
       const staffData={id:'stf'+Date.now(),name,role:role==='pharmacist'?'staff':role,dept,qual,contact:mobile};
       try{
@@ -801,19 +658,16 @@ window.submitCreateUser=async function(){
     alert('User "'+name+'" created successfully.');
   }catch(e){ errEl.textContent=e.message; errEl.style.display='block'; }
 };
+
 async function loadUsers(){
   if(!window._currentUser||window._currentUser.role!=='admin') return;
   const tbody=document.getElementById('users-tbody');
   if(!tbody) return;
   tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">Loading…</td></tr>';
   try{
-    const adminUsername=encodeURIComponent(window._currentUser.username||'');
-    const adminPw=encodeURIComponent(window._currentUser._adminPw||'');
-    const res=await fetch('/api/accounts?adminUsername='+adminUsername+'&adminPw='+adminPw);
-    const json=await res.json();
-    if(!json.ok) throw new Error(json.error);
-    if(!json.data.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">No users yet.</td></tr>'; return; }
-    tbody.innerHTML=json.data.map(u=>`<tr>
+    const data=await api('GET','/api/accounts');
+    if(!data||!data.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">No users yet.</td></tr>'; return; }
+    tbody.innerHTML=data.map(u=>`<tr>
       <td><b>${u.name||'—'}</b></td>
       <td><span class="badge">${u.role||'—'}</span></td>
       <td style="font-family:monospace;font-size:13px">${u.username||'—'}</td>
@@ -825,10 +679,10 @@ async function loadUsers(){
   }catch(e){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:#dc2626">'+e.message+'</td></tr>'; }
 }
 
-// Enter key triggers login
+// ── LOGIN / AUTH ────────────────────────────────────────────────────
 document.addEventListener('keydown', function(e){
   const loginPage = document.getElementById('page-login');
-  if (e.key === 'Enter' && loginPage && loginPage.classList.contains('active')) { window.doLogin(); }
+  if(e.key==='Enter' && loginPage && loginPage.classList.contains('active')) { window.doLogin(); }
 });
 
 window.doLogin=async function(){
@@ -837,9 +691,10 @@ window.doLogin=async function(){
   showAuthMsg('login-error','login-success','','');
   if(!username||!pw){ showAuthMsg('login-error','login-success','Please enter username and password.',true); return; }
   try{
-        const res=await api('POST','/api/accounts/login',{username,pw});
+    const res=await api('POST','/api/accounts/login',{username,pw});
     localStorage.setItem('meditrack_token', res.token);
-    window._currentUser={...res.user}; saveStoredUser(window._currentUser);
+    window._currentUser={...res.user};
+    saveStoredUser(window._currentUser);
     updateAuthUI();
     showAuthMsg('login-error','login-success','✓ Welcome back, '+res.user.name.split(' ')[0]+'!',false);
     setTimeout(()=>showPage('dashboard'),900);
@@ -856,10 +711,13 @@ window.doChangePassword=async function(){
   if(newPw!==confirm){ showAuthMsg('chpw-error','chpw-success','Passwords do not match.',true); return; }
   try{
     await api('PUT','/api/accounts/'+window._currentUser.id+'/password',{oldPw,newPw});
-    // No pw stored in session (password is hashed server-side)
     showAuthMsg('chpw-error','chpw-success','✓ Password updated successfully!',false);
     ['chpw-old','chpw-new','chpw-confirm'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});
   }catch(e){ showAuthMsg('chpw-error','chpw-success',e.message,true); }
+};
+
+window.doForgotPassword=function(){
+  showAuthMsg('forgot-error','forgot-success','Password reset is not available. Please contact your admin.',true);
 };
 
 function resetLoginForm(){
@@ -869,21 +727,24 @@ function resetLoginForm(){
   if(pwEl) pwEl.value='';
   showAuthMsg('login-error','login-success','','');
 }
+
 window.logoutUser=async function(){
   const u=window._currentUser||{};
   try{
     await fetch('/api/accounts/logout',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ username:u.username||u.email||'', role:u.role||'' })
+      body:JSON.stringify({ username:u.username||'', role:u.role||'' })
     });
-  }catch(_){ /* non-blocking — always log out locally */ }
+  }catch(_){}
+  localStorage.removeItem('meditrack_token');
   window._currentUser=null;
   clearStoredUser();
   updateAuthUI();
   resetLoginForm();
   showPage('login');
 };
+
 // ── CONFIRM DELETE MODAL ─────────────────────────────────────────────
 let _confirmCb=null, _confirmKeyword=null;
 window.confirmDelete=function({title,record,message,icon,btnLabel,requireType,onConfirm}){
@@ -904,8 +765,7 @@ window.confirmDelete=function({title,record,message,icon,btnLabel,requireType,on
     typeWrap.style.display='none';
     btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer';
   }
-  const modal=document.getElementById('confirm-modal');
-  modal.style.display='flex';
+  document.getElementById('confirm-modal').style.display='flex';
   setTimeout(()=>{ if(requireType) typeInput.focus(); },100);
 };
 window.checkConfirmKeyword=function(){
@@ -934,16 +794,14 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&!document.getElementById('confirm-action-btn').disabled) executeConfirm();
 });
 
-// Replace dischargePatient:
 window.dischargePatient=function(id){
   const p=getPatient(id); if(!p) return;
-  const u=window._currentUser||{};
   confirmDelete({
     icon:'🏥', title:'Discharge patient?', record:p.name,
     message:'Patient will be marked as discharged. All records are preserved.',
     btnLabel:'Discharge',
     onConfirm:async()=>{
-      const result=await api('POST','/api/patients/'+id+'/discharge',{_actor:u.email||'unknown',_actorRole:u.role||''});
+      const result=await api('POST','/api/patients/'+id+'/discharge',{});
       const updated={...p,status:'discharged',dischargeDate:result.dischargeDate};
       const idx=window._patients.findIndex(x=>x.id===id);
       if(idx>-1) window._patients[idx]=updated;
@@ -952,41 +810,141 @@ window.dischargePatient=function(id){
   });
 };
 
-// Replace removeStaff:
-window.removeStaff=function(id,name){
-  const u=window._currentUser||{};
-  confirmDelete({
-    record:name, message:'This staff member will be permanently removed.',
-    requireType:'DELETE',
-    onConfirm:async()=>{
-      await api('DELETE','/api/staff/'+id+'?actor='+encodeURIComponent(u.email||'unknown')+'&actorRole='+encodeURIComponent(u.role||''));
-      window._staff=window._staff.filter(s=>s.id!==id);
-      renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
-    }
-  });
+// ── DARK MODE ───────────────────────────────────────────────────────
+(function(){
+  if(localStorage.getItem('meditrack_theme')==='dark')
+    document.documentElement.classList.add('dark');
+  updateThemeIcon();
+})();
+window.toggleTheme=function(){
+  const dark=document.documentElement.classList.toggle('dark');
+  localStorage.setItem('meditrack_theme',dark?'dark':'light');
+  updateThemeIcon();
+};
+function updateThemeIcon(){
+  const btn=document.getElementById('theme-toggle'); if(!btn) return;
+  const dark=document.documentElement.classList.contains('dark');
+  btn.textContent=dark?'☀️':'🌙';
+  btn.title=dark?'Switch to light mode':'Switch to dark mode';
+}
+
+// ── VITALS LIVE RANGE INDICATORS ────────────────────────────────────
+const VITAL_RULES={
+  pulse:  {check:v=>{const n=parseFloat(v);if(isNaN(n)||v==='')return null;if(n<40||n>130)return'critical';if(n<50||n>110)return'warn';return'normal';},hint:{normal:'✓ Normal (60–100 bpm)',warn:'⚠ Outside normal range',critical:'✕ Critical'}},
+  temp:   {check:v=>{const n=parseFloat(v);if(isNaN(n)||v==='')return null;if(n<95||n>104)return'critical';if(n<96||n>100.4)return'warn';return'normal';},hint:{normal:'✓ Normal (97–99°F)',warn:'⚠ Fever or hypothermia',critical:'✕ Critical temperature'}},
+  spo2:   {check:v=>{const n=parseFloat(v);if(isNaN(n)||v==='')return null;if(n<90)return'critical';if(n<94)return'warn';return'normal';},hint:{normal:'✓ Normal (≥ 95%)',warn:'⚠ Low — consider O₂',critical:'✕ Critical hypoxia'}},
+  resp:   {check:v=>{const n=parseFloat(v);if(isNaN(n)||v==='')return null;if(n<8||n>30)return'critical';if(n<12||n>24)return'warn';return'normal';},hint:{normal:'✓ Normal (12–20 br/min)',warn:'⚠ Outside normal range',critical:'✕ Critical respiratory rate'}},
+  glucose:{check:v=>{const n=parseFloat(v);if(isNaN(n)||v==='')return null;if(n<50||n>400)return'critical';if(n<70||n>180)return'warn';return'normal';},hint:{normal:'✓ Normal (70–140 mg/dL)',warn:'⚠ Hypo/hyperglycaemia',critical:'✕ Critical glucose'}},
+  bp:     {check:v=>{if(!v||!v.includes('/'))return null;const[s,d]=v.split('/').map(Number);if(isNaN(s))return null;if(s<80||s>180||d<40||d>120)return'critical';if(s<90||s>140||d<60||d>90)return'warn';return'normal';},hint:{normal:'✓ Normal (90–140 / 60–90)',warn:'⚠ Hypo/hypertensive range',critical:'✕ Critical BP'}},
+};
+const VI_ICONS={normal:'✓',warn:'⚠',critical:'✕'};
+window.checkVital=function(field,value){
+  const rule=VITAL_RULES[field]; if(!rule) return;
+  const input=document.getElementById('v-'+field);
+  const ind  =document.getElementById('vi-'+field);
+  const hint =document.getElementById('vh-'+field);
+  if(!input) return;
+  input.classList.remove('vi-normal','vi-warn','vi-critical');
+  const level=rule.check(value);
+  if(!level||value===''){
+    if(ind) ind.textContent='';
+    if(hint){hint.className='vitals-hint';hint.textContent='';}
+    return;
+  }
+  input.classList.add('vi-'+level);
+  if(ind) ind.textContent=VI_ICONS[level];
+  if(hint){hint.className='vitals-hint hint-'+level;hint.textContent=rule.hint[level];}
 };
 
-// Replace deleteAppt:
-window.deleteAppt=function(id){
-  const a=window._appointments.find(x=>x.id===id);
-  const u=window._currentUser||{};
-  confirmDelete({
-    icon:'📅', title:'Cancel appointment?',
-    record:a?`${a.patientName} — ${a.date}`:id,
-    message:'This appointment will be permanently removed.',
-    btnLabel:'Cancel Appointment',
-    onConfirm:async()=>{
-      await api('DELETE','/api/appointments/'+id+'?actor='+encodeURIComponent(u.email||'unknown')+'&actorRole='+encodeURIComponent(u.role||''));
-      window._appointments=window._appointments.filter(x=>x.id!==id);
-      renderAppointments();
+// ── AUDIT TRAIL ─────────────────────────────────────────────────────
+window._auditPage=1; window._auditEntries=[];
+const AUDIT_COLORS={LOGIN:'#1a7f5a',LOGIN_FAILED:'#c0392b',LOGOUT:'#5a6560',PATIENT_ADMITTED:'#1565c0',PATIENT_UPDATED:'#0277bd',PATIENT_DISCHARGED:'#558b2f',PATIENT_DELETED:'#c0392b',VITALS_RECORDED:'#6a1b9a',STAFF_ADDED:'#1565c0',STAFF_UPDATED:'#0277bd',STAFF_REMOVED:'#c0392b',WARD_CREATED:'#1565c0',WARD_UPDATED:'#0277bd',WARD_DELETED:'#c0392b',APPOINTMENT_BOOKED:'#1565c0',APPOINTMENT_CANCELLED:'#c0392b',USER_CREATED:'#1a7f5a',PASSWORD_CHANGED:'#e65100'};
+function auditBadge(event){const c=AUDIT_COLORS[event]||'#5a6560';return `<span style="background:${c}18;color:${c};border:1px solid ${c}40;border-radius:4px;padding:2px 8px;font-size:10px;font-weight:600;letter-spacing:.04em">${event.replace(/_/g,' ')}</span>`;}
+function fmtTs(ts){if(!ts)return'—';const d=new Date(ts);return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+
+async function loadAuditStats(){
+  try{
+    const data=await api('GET','/api/audit/stats');
+    if(!data) return;
+    const row=document.getElementById('audit-stats-row'); if(!row) return;
+    row.innerHTML=[
+      {label:'Total Events',val:data.total.toLocaleString(),icon:'📋',color:'var(--p)'},
+      {label:'Last 24 Hours',val:data.today.toLocaleString(),icon:'🕐',color:'var(--ok)'},
+      {label:'Top Event',val:(data.topEvents[0]?.event||'—').replace(/_/g,' '),icon:'📌',color:'var(--warn)'},
+      {label:'Most Active User',val:data.topUsers[0]?.username||'—',icon:'👤',color:'#1565c0'},
+    ].map(c=>`<div class="stat-card"><div style="font-size:20px;margin-bottom:6px">${c.icon}</div><div class="stat-val" style="color:${c.color};font-size:22px">${c.val}</div><div class="stat-label">${c.label}</div></div>`).join('');
+  }catch(_){}
+}
+
+async function loadAudit(page){
+  window._auditPage=page||1;
+  const params=new URLSearchParams({page:window._auditPage,limit:50});
+  const search=document.getElementById('af-search')?.value.trim();
+  const event =document.getElementById('af-event')?.value;
+  const user  =document.getElementById('af-user')?.value.trim();
+  const from  =document.getElementById('af-from')?.value;
+  const to    =document.getElementById('af-to')?.value;
+  if(search)params.set('search',search);
+  if(event) params.set('event',event);
+  if(user)  params.set('username',user);
+  if(from)  params.set('from',from);
+  if(to)    params.set('to',to+'T23:59:59');
+  const tbody=document.getElementById('audit-tbody');
+  const pgEl =document.getElementById('audit-pagination');
+  if(tbody) tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--t3)">Loading…</td></tr>';
+  try{
+    const data=await api('GET','/api/audit?'+params.toString());
+    if(!data) return;
+    const {entries,total,pages}=data;
+    window._auditEntries=entries;
+    if(!entries.length){
+      tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--t3)">No records match.</td></tr>';
+      if(pgEl) pgEl.innerHTML=''; return;
     }
-  });
-};
+    tbody.innerHTML=entries.map((e,i)=>`<tr style="border-bottom:1px solid var(--b2);background:${i%2?'var(--surface2)':'transparent'}">
+      <td style="padding:9px 14px;white-space:nowrap;font-size:11px;color:var(--t2);font-family:monospace">${fmtTs(e.timestamp)}</td>
+      <td style="padding:9px 14px"><div style="font-weight:500">${e.username||'—'}</div><div style="font-size:10px;color:var(--t3)">${e.user_role||''}</div></td>
+      <td style="padding:9px 14px">${auditBadge(e.event)}</td>
+      <td style="padding:9px 14px;font-size:13px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.record||''}">${e.record||'—'}</td>
+      <td style="padding:9px 14px;font-size:11px;color:var(--t2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.old_value||''}">${e.old_value||'—'}</td>
+      <td style="padding:9px 14px;font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.new_value||''}">${e.new_value||'—'}</td>
+      <td style="padding:9px 14px;font-size:11px;color:var(--t3);font-family:monospace">${e.ip_address||'—'}</td>
+    </tr>`).join('');
+    if(pgEl){
+      const start=(window._auditPage-1)*50+1,end=Math.min(window._auditPage*50,total),cur=window._auditPage;
+      let btns='';
+      for(let p=Math.max(1,cur-2);p<=Math.min(pages,cur+2);p++)
+        btns+=`<button class="btn${p===cur?' primary':''}" style="min-width:32px;padding:4px 8px;font-size:12px" onclick="loadAudit(${p})">${p}</button>`;
+      pgEl.innerHTML=`<span style="font-size:12px;color:var(--t3)">Showing ${start}–${end} of ${total.toLocaleString()}</span>
+        <div style="display:flex;gap:6px">
+          ${cur>1?`<button class="btn" style="padding:4px 10px;font-size:12px" onclick="loadAudit(${cur-1})">← Prev</button>`:''}
+          ${btns}
+          ${cur<pages?`<button class="btn" style="padding:4px 10px;font-size:12px" onclick="loadAudit(${cur+1})">Next →</button>`:''}
+        </div>`;
+    }
+  }catch(e){
+    if(tbody) tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:24px;color:#c0392b">Error: ${e.message}</td></tr>`;
+  }
+}
+
+let _auditDebounce;
+function debounceAudit(){clearTimeout(_auditDebounce);_auditDebounce=setTimeout(()=>loadAudit(1),400);}
+function clearAuditFilters(){
+  ['af-search','af-event','af-user','af-from','af-to'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  loadAudit(1);
+}
+function exportAuditCSV(){
+  const entries=window._auditEntries||[];
+  if(!entries.length){alert('Load the audit page first.');return;}
+  const header=['Timestamp','User','Role','Event','Record','Before','After','IP'];
+  const rows=entries.map(e=>[fmtTs(e.timestamp),e.username||'',e.user_role||'',e.event||'',e.record||'',e.old_value||'',e.new_value||'',e.ip_address||''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','));
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([[header.join(','),...rows].join('\n')],{type:'text/csv'}));
+  a.download='meditrack-audit-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
 
 // ── BOOT ───────────────────────────────────────────────────────────
-// Banner already hidden in HTML (Railway PostgreSQL)
-
-// Restore logged-in user session
 window._currentUser=loadStoredUser();
 updateAuthUI();
 
