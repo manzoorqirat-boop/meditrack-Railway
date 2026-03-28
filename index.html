@@ -719,6 +719,30 @@
 
 <!-- Firebase setup modal removed - using Railway PostgreSQL -->
 
+<!-- ═══ MODAL: CONFIRM DELETE ═══ -->
+<div id="confirm-modal" class="modal-backdrop" style="display:none">
+  <div class="modal" style="max-width:400px;text-align:center">
+    <div id="confirm-icon" style="font-size:40px;margin-bottom:12px">🗑️</div>
+    <div id="confirm-title" style="font-size:18px;font-weight:700;margin-bottom:6px;font-family:var(--sans)">Are you sure?</div>
+    <div id="confirm-record" style="font-size:14px;font-weight:600;color:var(--danger);margin-bottom:6px"></div>
+    <div id="confirm-message" style="font-size:13px;color:var(--t2);line-height:1.6;margin-bottom:16px"></div>
+    <div id="confirm-type-wrap" style="display:none;margin-bottom:16px;text-align:left">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:6px">Type <strong id="confirm-keyword" style="color:var(--danger)">DELETE</strong> to confirm:</div>
+      <input id="confirm-type-input" type="text"
+        style="width:100%;padding:9px 12px;border:2px solid var(--b1);border-radius:var(--r-md);font-size:14px;font-family:var(--sans);background:var(--surface);color:var(--t1)"
+        oninput="checkConfirmKeyword()">
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn" style="flex:1" onclick="closeConfirmModal()">Cancel</button>
+      <button id="confirm-action-btn"
+        style="flex:1;padding:10px;border-radius:var(--r-md);border:none;cursor:not-allowed;opacity:.4;background:#fef2f2;color:#b91c1c;font-weight:600;font-size:14px;font-family:var(--sans);transition:all .2s"
+        disabled onclick="executeConfirm()">
+        <span id="confirm-btn-label">Delete</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js" type="module"></script>
 <script>if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js'); }</script>
 </body>
