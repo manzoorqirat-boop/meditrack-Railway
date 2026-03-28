@@ -663,7 +663,11 @@ async function loadUsers(){
   if(!window._currentUser||window._currentUser.role!=='admin') return;
   const tbody=document.getElementById('users-tbody');
   if(!tbody) return;
-  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">Loading…</td></tr>';
+  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--t2)">Loading…</td></tr>';
+  // Sync accounts → staff silently on every users page load
+  api('POST','/api/admin/sync-staff').then(r=>{
+    if(r&&r.synced>0){ renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect(); }
+  }).catch(()=>{});
   try{
     const data=await api('GET','/api/accounts');
     if(!data||!data.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">No users yet.</td></tr>'; return; }
