@@ -75,73 +75,27 @@ async function initDB() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_username
       ON accounts (username) WHERE username IS NOT NULL;
     CREATE TABLE IF NOT EXISTS audit_log (
-      id TEXT PRIMARY KEY, username TEXT NOT NULL, user_role TEXT DEFAULT '',
-      event TEXT NOT NULL, record TEXT DEFAULT '', old_value TEXT DEFAULT '',
-      new_value TEXT DEFAULT '', ip_address TEXT DEFAULT '',
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      user_role TEXT DEFAULT '',
+      event TEXT NOT NULL,
+      record TEXT DEFAULT '',
+      old_value TEXT DEFAULT '',
+      new_value TEXT DEFAULT '',
+      ip_address TEXT DEFAULT '',
       timestamp TIMESTAMPTZ DEFAULT NOW()
     );
-    -- Indexes
-    CREATE INDEX IF NOT EXISTS idx_audit_ts      ON audit_log   (timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_audit_user    ON audit_log   (username);
-    CREATE INDEX IF NOT EXISTS idx_audit_evt     ON audit_log   (event);
-    CREATE INDEX IF NOT EXISTS idx_vitals_patient ON vitals_log (patient_id);
-    CREATE INDEX IF NOT EXISTS idx_vitals_time   ON vitals_log  (time DESC);
-    CREATE INDEX IF NOT EXISTS idx_patients_status ON patients  (status);
-    CREATE INDEX IF NOT EXISTS idx_patients_upd  ON patients    (updated_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_appt_date     ON appointments(date DESC);
-    CREATE INDEX IF NOT EXISTS idx_appt_doctor   ON appointments(doctor);
-    CREATE INDEX IF NOT EXISTS idx_staff_role    ON staff       (role);
+    CREATE INDEX IF NOT EXISTS idx_audit_ts      ON audit_log    (timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_user    ON audit_log    (username);
+    CREATE INDEX IF NOT EXISTS idx_audit_evt     ON audit_log    (event);
+    CREATE INDEX IF NOT EXISTS idx_vitals_patient ON vitals_log  (patient_id);
+    CREATE INDEX IF NOT EXISTS idx_vitals_time   ON vitals_log   (time DESC);
+    CREATE INDEX IF NOT EXISTS idx_patients_status ON patients   (status);
+    CREATE INDEX IF NOT EXISTS idx_patients_upd  ON patients     (updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_appt_date     ON appointments (date DESC);
+    CREATE INDEX IF NOT EXISTS idx_appt_doctor   ON appointments (doctor);
+    CREATE INDEX IF NOT EXISTS idx_staff_role    ON staff        (role);
   `);
-
-  // Migrate existing TEXT date columns → proper types (safe, runs once)
-  try {
-    await pool.query(`
-      DO $$ BEGIN
-        IF EXISTS (SELECT 1 FROM information_schema.columns
-          WHERE table_name='patients' AND column_name='admit_date' AND data_type='text')
-        THEN
-          ALTER TABLE patients
-            ALTER COLUMN admit_date     TYPE DATE        USING NULLIF(admit_date,'')::DATE,
-            ALTER COLUMN discharge_date TYPE TIMESTAMPTZ USING NULLIF(discharge_date,'')::TIMESTAMPTZ,
-            ALTER COLUMN updated_at     TYPE TIMESTAMPTZ USING NULLIF(updated_at,'')::TIMESTAMPTZ;
-          ALTER TABLE vitals_log
-            ALTER COLUMN time     TYPE TIMESTAMPTZ USING NULLIF(time,'')::TIMESTAMPTZ,
-            ALTER COLUMN saved_at TYPE TIMESTAMPTZ USING NULLIF(saved_at,'')::TIMESTAMPTZ;
-          ALTER TABLE appointments
-            ALTER COLUMN date       TYPE DATE        USING NULLIF(date,'')::DATE,
-            ALTER COLUMN created_at TYPE TIMESTAMPTZ USING NULLIF(created_at,'')::TIMESTAMPTZ;
-        END IF;
-      END $$;
-    `);
-    console.log('Date migration complete');
-  } catch(e) { console.warn('Date migration skipped:', e.message); }
-
-  // Seed wards
-  const { rowCount } = await pool.query('SELECT 1 FROM wards LIMIT 1');
-  if (rowCount === 0) {
-    await pool.query(`INSERT INTO wards VALUES
-      ('w1','General Ward A',12,'General'),
-      ('w2','ICU',4,'ICU'),
-      ('w3','Pediatric Ward',6,'Pediatric')
-      ON CONFLICT DO NOTHING`);
-  }
-  // Seed admin
-  const { rowCount: adminCount } = await pool.query('SELECT 1 FROM accounts LIMIT 1');
-  if (adminCount === 0) {
-    const defaultPw = await bcrypt.hash('Admin@123', 10);
-    await pool.query(
-      `INSERT INTO accounts (id,name,role,email,mobile,dept,emp_id,pw,created_at,username)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING`,
-      ['admin-001','Administrator','admin','admin@meditrack.local','',
-       'Administration','ADM-001',defaultPw,new Date(),'admin']
-    );
-    console.log('Default admin seeded — username: admin  password: Admin@123');
-  } else {
-    await pool.query(`UPDATE accounts SET username=SPLIT_PART(email,'@',1) WHERE username IS NULL AND email IS NOT NULL AND email!=''`);
-    await pool.query(`UPDATE accounts SET username=id WHERE username IS NULL`);
-  }
-  console.log('Database ready');
-}
 
   // Migrate existing TEXT date columns to proper types (runs once, safe on re-deploy)
   try {
