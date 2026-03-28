@@ -42,7 +42,7 @@ window.showPage=function(id){
   else if(id==='patients')         { window._patientSearch=''; const si=document.getElementById('patient-search'); if(si) si.value=''; renderPatients(window._patientFilter); }
   else if(id==='vitals')           { populatePatientSelect(); refreshNurseSelect(); }
   else if(id==='wards')            { stopVitalsClock(); renderWards(); }
-  else if(id==='staff')            { stopVitalsClock(); renderStaffPage(); }
+  else if(id==='staff')            { stopVitalsClock(); refreshStaffFromAPI(); }
   else if(id==='history')          { stopVitalsClock(); populateHistorySelect(); renderHistory(); }
   else if(id==='appointments')     { stopVitalsClock(); renderAppointments(); }
   else if(id==='book-appointment') { stopVitalsClock(); initPublicBookAppt(); }
@@ -115,7 +115,7 @@ async function loadAll(){
 function normalizePatient(r){ return {id:r.id,name:r.name,age:r.age,gender:r.gender,blood:r.blood,contact:r.contact,wardId:r.ward_id,admitDate:r.admit_date,doctor:r.doctor,diagnosis:r.diagnosis,allergies:r.allergies,status:r.status,dischargeDate:r.discharge_date,updatedAt:r.updated_at}; }
 function normalizeVital(r){ return {id:r.id,patientId:r.patient_id,time:r.time,bp:r.bp,pulse:r.pulse,temp:r.temp,spo2:r.spo2,resp:r.resp,glucose:r.glucose,pain:r.pain,nurse:r.nurse,notes:r.notes,savedAt:r.saved_at}; }
 function normalizeWard(r){ return {id:r.id,name:r.name,beds:r.beds,type:r.type}; }
-function normalizeStaff(r){ return {id:r.id,name:r.name,role:r.role,dept:r.dept,qual:r.qual,contact:r.contact,fee:r.fee||0}; }
+function normalizeStaff(r){ return {id:r.id,name:r.name,role:r.role,dept:r.dept,qual:r.qual,contact:r.contact,fee:r.fee||0,workingHours:r.working_hours?JSON.parse(r.working_hours):null,accountId:r.account_id||''}; }
 function normalizeAppt(r){ return {id:r.id,patientName:r.patient_name,mobile:r.mobile,age:r.age,gender:r.gender,date:r.date,time:r.time,doctor:r.doctor,dept:r.dept,reason:r.reason,notes:r.notes,status:r.status,createdAt:r.created_at,fee:r.fee||0,advance:r.advance||0,paymentStatus:r.payment_status||'unpaid',paymentRef:r.payment_ref||''}; }
 
 function refreshCurrentPage(){
@@ -140,14 +140,28 @@ function renderDashboard(){
   document.getElementById('stat-today').textContent=window._patients.filter(p=>p.admitDate===todayStr&&p.status==='admitted').length;
   document.getElementById('stat-warn').textContent=warn.length;
   document.getElementById('stat-logs').textContent=window._vitalsLog.filter(l=>l.time&&l.time.startsWith(todayStr)).length;
-  document.getElementById('alert-area').innerHTML=warn.map(p=>`<div class="alert-banner"><span style="font-size:16px">⚠</span><b>${p.name}</b> — abnormal vitals. Immediate review recommended.</div>`).join('');
+  // Issue 9: Make stat cards clickable
+  const sc=document.querySelectorAll('.stat-card');
+  if(sc[0]) sc[0].style.cursor='pointer', sc[0].onclick=()=>showPage('patients');
+  if(sc[1]) sc[1].style.cursor='pointer', sc[1].onclick=()=>{filterPatients('admitted',document.querySelectorAll('#page-patients .tab')[1]);showPage('patients');};
+  if(sc[2]) sc[2].style.cursor='pointer', sc[2].onclick=()=>showPage('patients');
+  if(sc[3]) sc[3].style.cursor='pointer', sc[3].onclick=()=>showPage('history');
+  document.getElementById('alert-area').innerHTML=warn.map(p=>`<div class="alert-banner" style="cursor:pointer" onclick="editPatient('${p.id}');showPage('patients')"><span style="font-size:16px">⚠</span><b>${p.name}</b> — abnormal vitals. Tap to review patient.</div>`).join('');
+  // Recent vitals - clickable (Issue 9)
   const recent=window._vitalsLog.slice(0,5);
   document.getElementById('dash-activity').innerHTML=recent.length?recent.map(l=>{
     const p=getPatient(l.patientId);
     const t=l.time?new Date(l.time).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'}):'—';
-    return `<div class="history-row"><span class="time-badge">${t}</span><div><div style="font-size:13px;font-weight:500">${p?p.name:'Unknown'}</div><div class="vitals-chips"><span class="v-chip">BP ${l.bp||'—'}</span><span class="v-chip">Pulse ${l.pulse||'—'} bpm</span><span class="v-chip">Temp ${l.temp||'—'}°F</span><span class="v-chip ${parseFloat(l.spo2)<94?'abnormal':''}">SpO2 ${l.spo2||'—'}%</span></div></div></div>`;
+    return `<div class="history-row" style="cursor:pointer" onclick="document.getElementById('hist-patient').value='${l.patientId}';showPage('history')"><span class="time-badge">${t}</span><div><div style="font-size:13px;font-weight:500">${p?p.name:'Unknown'}</div><div class="vitals-chips"><span class="v-chip">BP ${l.bp||'—'}</span><span class="v-chip">Pulse ${l.pulse||'—'} bpm</span><span class="v-chip">Temp ${l.temp||'—'}°F</span><span class="v-chip ${parseFloat(l.spo2)<94?'abnormal':''}">SpO2 ${l.spo2||'—'}%</span></div></div></div>`;
   }).join(''):'<div class="empty-state">No vitals recorded yet.</div>';
-  document.getElementById('dash-patients').innerHTML=admitted.map(p=>`<div class="patient-row"><div class="patient-info"><div class="avatar">${ini(p.name)}</div><div><div class="patient-name">${p.name}</div><div class="patient-meta">${p.age||''}y · ${p.gender||''} · ${getWard(p.wardId)?getWard(p.wardId).name:'No ward'}</div></div></div>${statusBadge(p)}</div>`).join('')||'<div class="empty-state">No admitted patients.</div>';
+  // Patient rows - clickable (Issue 9)
+  document.getElementById('dash-patients').innerHTML=admitted.map(p=>`<div class="patient-row" style="cursor:pointer" onclick="editPatient('${p.id}');showPage('patients')"><div class="patient-info"><div class="avatar">${ini(p.name)}</div><div><div class="patient-name">${p.name}</div><div class="patient-meta">${p.age||''}y · ${p.gender||''} · ${getWard(p.wardId)?getWard(p.wardId).name:'No ward'}</div></div></div>${statusBadge(p)}</div>`).join('')||'<div class="empty-state">No admitted patients.</div>';
+  // Issue 4: Today's appointments
+  const todayAppts=(window._appointments||[]).filter(a=>a.date===todayStr).sort((a,b)=>a.time>b.time?1:-1);
+  const dashAppt=document.getElementById('dash-appointments');
+  if(dashAppt){
+    dashAppt.innerHTML=todayAppts.length?todayAppts.map(a=>`<div class="patient-row" style="cursor:pointer" onclick="filterAppts('today',null);showPage('appointments')"><div class="patient-info"><div class="avatar" style="background:var(--p)">${ini(a.patientName)}</div><div><div class="patient-name">${a.patientName}</div><div class="patient-meta">${a.time||'—'} · ${a.doctor?'Dr. '+a.doctor:'No doctor'} · ${a.dept||'General'}</div></div></div><span class="badge ${a.status==='completed'?'badge-ok':a.status==='cancelled'?'badge-gray':'badge-warn'}">${a.status}</span></div>`).join(''):'<div class="empty-state" style="cursor:pointer" onclick="showPage('appointments')">No appointments today. <span style="color:var(--p)">View all →</span></div>';
+  }
 }
 
 // ── PATIENTS ───────────────────────────────────────────────────────
@@ -264,8 +278,10 @@ function stopVitalsClock(){
 function refreshNurseSelect(selected){
   const el=document.getElementById('v-nurse'); if(!el) return;
   const nurses=window._staff.filter(s=>s.role!=='doctor');
+  // Issue 3: Auto-select logged-in user if they are nurse/staff
+  const autoSelect=selected||(window._currentUser&&window._currentUser.role!=='doctor'&&window._currentUser.role!=='admin'?window._currentUser.name:null);
   el.innerHTML=nurses.length
-    ? '<option value="">— select nurse / staff —</option>'+nurses.map(n=>`<option value="${n.name}"${selected===n.name?' selected':''}>${n.name}${n.role==='nurse'?' (Nurse)':' (Staff)'}${n.dept?' · '+n.dept:''}</option>`).join('')
+    ? '<option value="">— select nurse / staff —</option>'+nurses.map(n=>`<option value="${n.name}"${autoSelect===n.name?' selected':''}>${n.name}${n.role==='nurse'?' (Nurse)':' (Staff)'}${n.dept?' · '+n.dept:''}</option>`).join('')
     : '<option value="">— no nurses added yet —</option>';
 }
 
@@ -322,20 +338,39 @@ window.saveWard=async function(){
 };
 
 // ── STAFF (view-only) ──────────────────────────────────────────────
+// Refresh staff from API before rendering (Issue 1 fix)
+async function refreshStaffFromAPI(){
+  try{
+    const freshStaff=await api('GET','/api/staff');
+    window._staff=freshStaff.map(normalizeStaff);
+  }catch(e){ console.warn('Staff refresh failed:',e.message); }
+  renderStaffPage();
+}
+
 function renderStaffPage(){
   const doctors=window._staff.filter(s=>s.role==='doctor');
   const nurses=window._staff.filter(s=>s.role!=='doctor');
+  const isAdmin=window._currentUser&&window._currentUser.role==='admin';
+  function whDisplay(s){
+    if(!s.workingHours) return '<span style="font-size:10px;color:var(--t3)">Hours not set</span>';
+    const wh=s.workingHours;
+    const days=(wh.days||[]).map(d=>d.slice(0,3)).join(', ');
+    return `<span style="font-size:10px;color:var(--t2)">${days} · ${wh.start||'?'}–${wh.end||'?'}</span>`;
+  }
   function card(s){
     const avcls=s.role==='doctor'?'doctor':s.role==='nurse'?'nurse':'other';
     const bdg=s.role==='doctor'?'<span class="badge badge-info">Doctor</span>':s.role==='nurse'?'<span class="badge badge-ok">Nurse</span>':'<span class="badge badge-purple">Staff</span>';
     const sub=[s.qual,s.dept].filter(Boolean).join(' · ')||'—';
     const feeStr = s.role==='doctor'&&s.fee>0 ? `<span style="font-size:11px;color:var(--p);font-weight:600">₹${s.fee}</span>` : '';
+    const whBtn = isAdmin&&s.role==='doctor' ? `<button class="btn sm" style="margin-top:6px;font-size:10px" onclick="openWorkingHours('${s.id}','${s.name.replace(/'/g,'\\'')}')">⏰ Working Hours</button>` : '';
+    const whInfo = s.role==='doctor' ? `<div style="margin-top:4px">${whDisplay(s)}</div>` : '';
     return `<div class="staff-card">
       <div class="staff-card-top">
         <div class="staff-av ${avcls}">${ini(s.name)}</div>
         <div><div class="staff-nm">${s.name}</div><div class="staff-sub">${sub}</div></div>
       </div>
       <div class="staff-row2">${bdg}${feeStr}<span class="staff-contact">${s.contact||''}</span></div>
+      ${whInfo}${whBtn}
     </div>`;
   }
   const dEl=document.getElementById('staff-grid-doctors');
@@ -343,6 +378,38 @@ function renderStaffPage(){
   if(dEl) dEl.innerHTML=doctors.length?doctors.map(card).join(''):'<div class="staff-empty">No doctors added yet. Add a user with the Doctor role to see them here.</div>';
   if(nEl) nEl.innerHTML=nurses.length?nurses.map(card).join(''):'<div class="staff-empty">No nurses or staff added yet. Add users with Nurse or Staff roles to see them here.</div>';
 }
+
+// Working hours modal functions (Issue 7)
+window.openWorkingHours=function(staffId, staffName){
+  const s=window._staff.find(x=>x.id===staffId);
+  const wh=s?.workingHours||{days:['mon','tue','wed','thu','fri'],start:'09:00',end:'17:00'};
+  const days=['mon','tue','wed','thu','fri','sat','sun'];
+  const dayLabels={mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
+  const dayCheckboxes=days.map(d=>`<label style="display:inline-flex;align-items:center;gap:4px;margin:4px 6px 4px 0;cursor:pointer"><input type="checkbox" id="wh-day-${d}" ${(wh.days||[]).includes(d)?'checked':''} style="width:14px;height:14px"> ${dayLabels[d]}</label>`).join('');
+  document.getElementById('modal-working-hours-title').textContent='Working Hours — '+staffName;
+  document.getElementById('wh-staff-id').value=staffId;
+  document.getElementById('wh-days-wrap').innerHTML=dayCheckboxes;
+  document.getElementById('wh-start').value=wh.start||'09:00';
+  document.getElementById('wh-end').value=wh.end||'17:00';
+  document.getElementById('modal-working-hours').classList.add('open');
+};
+
+window.saveWorkingHours=async function(){
+  const staffId=document.getElementById('wh-staff-id').value;
+  const days=['mon','tue','wed','thu','fri','sat','sun'].filter(d=>document.getElementById('wh-day-'+d)?.checked);
+  const start=document.getElementById('wh-start').value;
+  const end=document.getElementById('wh-end').value;
+  if(!start||!end){ alert('Please set start and end times.'); return; }
+  if(start>=end){ alert('End time must be after start time.'); return; }
+  const workingHours={days,start,end};
+  try{
+    await api('PUT','/api/staff/'+staffId+'/working-hours',{workingHours});
+    const idx=window._staff.findIndex(s=>s.id===staffId);
+    if(idx>-1) window._staff[idx].workingHours=workingHours;
+    closeModal('modal-working-hours');
+    renderStaffPage();
+  }catch(e){ alert('Save failed: '+e.message); }
+};
 
 // ── HISTORY / REPORT ───────────────────────────────────────────────
 function populateHistorySelect(){
@@ -509,7 +576,7 @@ function renderAppointments(filter){
   }).join(''):'<div class="empty-state">No appointments found.</div>';
 }
 
-window.filterAppts=function(f,el){ document.querySelectorAll('#page-appointments .tab').forEach(t=>t.classList.remove('active')); if(el) el.classList.add('active'); renderAppointments(f); };
+window.filterAppts=function(f,el){ document.querySelectorAll('#page-appointments .tab').forEach(t=>t.classList.remove('active')); if(el) el.classList.add('active'); window._apptFilter=f; renderAppointments(f); };
 
 window.markApptDone=async function(id){
   const idx=window._appointments.findIndex(a=>a.id===id); if(idx<0) return;
@@ -540,7 +607,11 @@ let _apptDoctors=[], _apptSettings={};
 
 async function initPublicBookAppt(){
   showApptStep(1);
-  document.getElementById('appt-date').value=todayStr();
+  const dateEl=document.getElementById('appt-date');
+  dateEl.value=todayStr();
+  dateEl.min=todayStr(); // Issue 6: disable past dates
+  // Issue 5 & 6: refresh time slots when date/doctor changes
+  dateEl.onchange=checkApptSlots;
   ['appt-pname','appt-mobile','appt-reason','appt-notes','appt-payment-ref','appt-paid-amount'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   const ageEl=document.getElementById('appt-age'); if(ageEl) ageEl.value='';
   const timeEl=document.getElementById('appt-appttime'); if(timeEl) timeEl.value='';
@@ -584,7 +655,67 @@ window.onDoctorSelect=function(sel){
   } else {
     feeCard.style.display='none';
   }
+  checkApptSlots(); // Issue 5: check booked slots for this doctor+date
 };
+
+// Issue 5 & 6: Check booked slots and working hours for selected doctor+date
+window._bookedSlots=[];
+window._apptWorkingHours=null;
+async function checkApptSlots(){
+  const doctor=document.getElementById('appt-doctor').value;
+  const date=document.getElementById('appt-date').value;
+  const slotMsg=document.getElementById('appt-slot-msg');
+  const timeInput=document.getElementById('appt-appttime');
+  if(!doctor||!date){ if(slotMsg) slotMsg.style.display='none'; return; }
+  try{
+    const r=await fetch(`/api/public/booked-slots?doctor=${encodeURIComponent(doctor)}&date=${encodeURIComponent(date)}`);
+    const data=await r.json();
+    if(data.ok){
+      window._bookedSlots=data.data.bookedTimes||[];
+      window._apptWorkingHours=data.data.workingHours||null;
+      const wh=window._apptWorkingHours;
+      let info='';
+      if(window._bookedSlots.length>0){
+        info+=`<div style="color:#c0392b;font-size:12px;margin-bottom:4px">⛔ Already booked: ${window._bookedSlots.join(', ')}</div>`;
+      }
+      if(wh){
+        const dayNames=['sun','mon','tue','wed','thu','fri','sat'];
+        const dayOfWeek=dayNames[new Date(date+'T00:00:00').getDay()];
+        if(!(wh.days||[]).includes(dayOfWeek)){
+          info+=`<div style="color:#c0392b;font-size:12px">❌ Dr. ${doctor} does not work on ${new Date(date+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long'})}.</div>`;
+        } else {
+          info+=`<div style="color:#1D9E75;font-size:12px">✓ Working hours: ${wh.start} – ${wh.end}</div>`;
+          if(timeInput){ timeInput.min=wh.start; timeInput.max=wh.end; }
+        }
+      }
+      if(slotMsg){ slotMsg.innerHTML=info||''; slotMsg.style.display=info?'block':'none'; }
+    }
+  }catch(e){ console.warn('Could not check slots:', e.message); }
+}
+
+// Validate time on blur - Issue 5
+document.addEventListener('DOMContentLoaded',function(){
+  const timeInput=document.getElementById('appt-appttime');
+  if(timeInput) timeInput.addEventListener('change',function(){
+    const t=this.value;
+    if(!t) return;
+    if(window._bookedSlots.includes(t)){
+      document.getElementById('appt-form-err').textContent='This time slot is already booked for this doctor. Please choose another time.';
+      document.getElementById('appt-form-err').style.display='block';
+      this.value='';
+    } else {
+      const err=document.getElementById('appt-form-err'); if(err) err.style.display='none';
+    }
+    const wh=window._apptWorkingHours;
+    if(wh&&t){
+      if(t<wh.start||t>wh.end){
+        document.getElementById('appt-form-err').textContent=`Doctor works ${wh.start}–${wh.end}. Please choose a time within working hours.`;
+        document.getElementById('appt-form-err').style.display='block';
+        this.value='';
+      }
+    }
+  });
+});
 
 window.proceedToPayment=function(){
   const name=document.getElementById('appt-pname').value.trim();
@@ -669,6 +800,8 @@ async function _doSaveAppointment({ fee, advance, paymentRef }){
         <div style="margin-top:8px;font-size:12px;color:var(--t3)">Please show this confirmation at reception.</div>`;
     }
     showApptStep(3);
+    // Issue 4: Refresh dashboard appointment display if logged in
+    if(window._currentUser){ try{ const appts=await api('GET','/api/appointments'); window._appointments=appts.map(normalizeAppt); }catch(_){} }
   }catch(e){
     const errEl=document.getElementById('appt-form-err')||document.getElementById('appt-pay-err');
     if(errEl){ errEl.textContent='Booking failed: '+e.message; errEl.style.display='block'; }
@@ -695,7 +828,13 @@ function updateAuthUI(){
   const drawerAuditBtn=document.getElementById('drawer-audit-btn');
   if(drawerAuditBtn) drawerAuditBtn.style.display=isAdmin?'block':'none';
   const bnavAcc=document.getElementById('bnav-account');
-  if(bnavAcc){ bnavAcc.innerHTML=loggedIn?'<span class="b-icon">👤</span>Account':'<span class="b-icon">🔑</span>Login'; }
+  if(bnavAcc){
+    bnavAcc.innerHTML=loggedIn?'<span class="b-icon">👤</span>Account':'<span class="b-icon">🔑</span>Login';
+    bnavAcc.onclick=loggedIn?function(){showPage('change-password');}:function(){showPage('login');};
+  }
+  // Issue 8: Show/hide bottom nav based on login state
+  const bottomNav=document.getElementById('bottom-nav');
+  if(bottomNav) bottomNav.style.display=loggedIn?'block':'none';
   if(loggedIn){
     const av=ini(u.name);
     document.getElementById('user-av-top').textContent=av;
@@ -778,14 +917,19 @@ window.submitCreateUser=async function(){
       createdAt:new Date().toISOString()
     });
     if(role==='doctor'||role==='nurse'||role==='staff'||role==='pharmacist'){
-      const staffData={id:'stf'+Date.now(),name,role:role==='pharmacist'?'staff':role,dept,qual,contact:mobile,fee};
+      const staffData={id:'stf'+Date.now(),name,role:role==='pharmacist'?'staff':(role==='receptionist'?'staff':role),dept,qual,contact:mobile,fee};
       try{
         await api('POST','/api/staff',staffData);
-        const idx=window._staff.findIndex(s=>s.id===staffData.id);
-        if(idx>-1) window._staff[idx]=staffData; else window._staff.push(staffData);
-        renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
+        const idx=window._staff.findIndex(s=>s.name===name);
+        if(idx>-1) window._staff[idx]={...window._staff[idx],...staffData}; else window._staff.push(staffData);
       }catch(se){ console.warn('Staff sync failed:',se.message); }
     }
+    // Force reload staff from DB so Staff page shows new user immediately
+    try{
+      const freshStaff=await api('GET','/api/staff');
+      window._staff=freshStaff.map(normalizeStaff);
+    }catch(_){}
+    renderStaffPage(); refreshDoctorSelect(); refreshNurseSelect();
     closeCreateUser();
     loadUsers();
     alert('User "'+name+'" created successfully.');
