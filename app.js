@@ -374,6 +374,7 @@ window.clearHistFilter=function(){
   document.getElementById('hist-date-from').value='';
   document.getElementById('hist-date-to').value='';
   document.getElementById('hist-status').value='';
+  window._historyPage=1;
   renderHistory();
 };
 
@@ -390,7 +391,8 @@ window.renderHistory = async function(){
   if (pid)  params.set('patientId', pid);
   if (from) params.set('from', from);
   if (to)   params.set('to', to);
-  if (status === 'abnormal') params.set('abnormal','true');
+    if (status === 'abnormal') params.set('abnormal','true');
+  // 'normal' filtered client-side after fetch
 
   try {
     const token = localStorage.getItem('meditrack_token') || '';
@@ -407,11 +409,12 @@ window.renderHistory = async function(){
       return {...l,_abnormal:as||ap||at||ag,_as:as,_ap:ap,_at:at,_ag:ag};
     });
 
-    if (!logs.length) {
+        const filtered = status==='normal' ? logs.filter(l=>!l._abnormal) : logs;
+    if (!filtered.length) {
       container.innerHTML='<div class="card"><div class="empty-state">No vitals records match.</div></div>';
       return;
     }
-    const rows = logs.map(l => {
+        const rows = filtered.map(l => {
       const p=getPatient(l.patientId);
       const t=l.time?new Date(l.time).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'}):'—';
       return `<div class="history-row${l._abnormal?' rpt-row-abnormal':''}">
