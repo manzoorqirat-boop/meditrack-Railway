@@ -107,14 +107,14 @@
   </div>
 
   <!-- BOTTOM NAV -->
-  <nav class="bottom-nav">
+  <nav class="bottom-nav" id="bottom-nav" style="display:none">
     <div class="bottom-nav-inner">
       <button class="bnav-btn" data-page="dashboard" onclick="showPage('dashboard')"><span class="b-icon">🏠</span>Home</button>
       <button class="bnav-btn" data-page="patients"  onclick="showPage('patients')"><span class="b-icon">👤</span>Patients</button>
       <button class="bnav-btn" data-page="vitals"    onclick="showPage('vitals')"><span class="b-icon">💓</span>Vitals</button>
       <button class="bnav-btn" data-page="book-appointment" onclick="showPublicBooking()"><span class="b-icon">📅</span>Book</button>
       <button class="bnav-btn" data-page="staff"     onclick="showPage('staff')"><span class="b-icon">👨‍⚕️</span>Staff</button>
-      <button class="bnav-btn" data-page="login"     onclick="showPage('login')" id="bnav-account"><span class="b-icon">🔑</span>Account</button>
+      <button class="bnav-btn" id="bnav-account" onclick="showPage('login')"><span class="b-icon">🔑</span>Account</button>
     </div>
   </nav>
 
@@ -141,6 +141,13 @@
       <div id="alert-area"></div>
       <div class="card"><div class="section-title">Recent Vitals Activity</div><div id="dash-activity"></div></div>
       <div class="card"><div class="section-title">Patient Status Summary</div><div id="dash-patients"></div></div>
+      <div class="card" style="margin-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div class="section-title" style="margin-bottom:0">Today's Appointments</div>
+          <button class="btn sm" onclick="showPage('appointments')">View All →</button>
+        </div>
+        <div id="dash-appointments"><div class="empty-state">No appointments today.</div></div>
+      </div>
     </div>
 
     <!-- PATIENTS -->
@@ -357,7 +364,7 @@
                 <option value="">— select doctor —</option>
               </select>
             </div>
-            <div class="form-group full"><label>Reason / Chief Complaint</label><textarea id="appt-reason" placeholder="Reason for appointment..."></textarea></div>
+            <div id="appt-slot-msg" style="display:none;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--r-md);border:1px solid var(--b1)"></div><div class="form-group full"><label>Reason / Chief Complaint</label><textarea id="appt-reason" placeholder="Reason for appointment..."></textarea></div>
             <div class="form-group full"><label>Notes</label><input id="appt-notes" placeholder="Any additional notes..."></div>
           </div>
 
@@ -756,6 +763,30 @@
         disabled onclick="executeConfirm()">
         <span id="confirm-btn-label">Delete</span>
       </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ MODAL: WORKING HOURS ═══ -->
+<div class="modal-backdrop" id="modal-working-hours">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-working-hours-title">Working Hours</div>
+      <button class="close-btn" onclick="closeModal('modal-working-hours')">×</button>
+    </div>
+    <input type="hidden" id="wh-staff-id">
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Working Days</label>
+      <div id="wh-days-wrap" style="display:flex;flex-wrap:wrap;gap:4px;padding:8px;border:1px solid var(--b1);border-radius:var(--r-md);background:var(--surface2)"></div>
+    </div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+      <div class="form-group"><label>Start Time</label><input type="time" id="wh-start" value="09:00"></div>
+      <div class="form-group"><label>End Time</label><input type="time" id="wh-end" value="17:00"></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn primary" onclick="saveWorkingHours()">Save Hours</button>
+      <button class="btn" onclick="closeModal('modal-working-hours')">Cancel</button>
     </div>
   </div>
 </div>
