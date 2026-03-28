@@ -548,6 +548,77 @@
       </div>
     </div>
 
+      <!-- AUDIT TRAIL (admin only) -->
+    <div class="page" id="page-audit">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🔍 Audit Trail</div>
+          <div style="font-size:12px;color:var(--t3);margin-top:2px">Immutable log of all system activity · Admin only</div>
+        </div>
+        <button class="btn" onclick="exportAuditCSV()" style="display:flex;align-items:center;gap:6px">⬇ Export CSV</button>
+      </div>
+      <div id="audit-stats-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px"></div>
+      <div class="card" style="padding:16px;margin-bottom:14px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end">
+          <div>
+            <label style="font-size:11px;color:var(--t2);display:block;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Search</label>
+            <input id="af-search" type="text" placeholder="Patient, keyword…" oninput="debounceAudit()">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--t2);display:block;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Event</label>
+            <select id="af-event" onchange="loadAudit(1)">
+              <option value="">All Events</option>
+              <option>LOGIN</option><option>LOGIN_FAILED</option><option>LOGOUT</option>
+              <option>PATIENT_ADMITTED</option><option>PATIENT_UPDATED</option>
+              <option>PATIENT_DISCHARGED</option><option>PATIENT_DELETED</option>
+              <option>VITALS_RECORDED</option>
+              <option>STAFF_ADDED</option><option>STAFF_UPDATED</option><option>STAFF_REMOVED</option>
+              <option>WARD_CREATED</option><option>WARD_UPDATED</option><option>WARD_DELETED</option>
+              <option>APPOINTMENT_BOOKED</option><option>APPOINTMENT_CANCELLED</option>
+              <option>USER_CREATED</option><option>PASSWORD_CHANGED</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--t2);display:block;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">User</label>
+            <input id="af-user" type="text" placeholder="Filter by username…" oninput="debounceAudit()">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--t2);display:block;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">From</label>
+            <input id="af-from" type="date" onchange="loadAudit(1)">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--t2);display:block;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">To</label>
+            <input id="af-to" type="date" onchange="loadAudit(1)">
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn primary" style="flex:1" onclick="loadAudit(1)">Apply</button>
+            <button class="btn" onclick="clearAuditFilters()">Clear</button>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="background:var(--surface2);border-bottom:1px solid var(--b1)">
+                <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Timestamp</th>
+                <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">User</th>
+                <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Event</th>
+                <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Record</th>
+                <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Before</th>
+                <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">After</th>
+                <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">IP</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--t3)">Open Audit Trail to load data</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="audit-pagination" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--b2);flex-wrap:wrap;gap:8px;min-height:52px"></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
