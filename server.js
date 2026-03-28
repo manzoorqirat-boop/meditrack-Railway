@@ -97,6 +97,12 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_staff_role    ON staff        (role);
   `);
 
+    // Add lockout columns if they don't exist (safe, idempotent)
+  await pool.query(`
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS failed_attempts INTEGER DEFAULT 0;
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
+  `);
+
   // Migrate existing TEXT date columns to proper types (runs once, safe on re-deploy)
   try {
     await pool.query(`
