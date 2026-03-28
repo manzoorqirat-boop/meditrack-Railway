@@ -149,6 +149,15 @@
         <div class="page-title">Patient Registry</div>
         <button class="btn primary" onclick="openAddPatient()">+ Add Patient</button>
       </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <div style="position:relative;flex:1;min-width:220px">
+          <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--t3)" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="6"/><path d="M15 15l3 3"/></svg>
+          <input id="patient-search" type="search" placeholder="Search name, doctor, diagnosis, ward…"
+            style="width:100%;padding:8px 10px 8px 32px;border:1px solid var(--b1);border-radius:var(--r-md);font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--t1);outline:none;transition:border-color .2s"
+            oninput="window._patientSearch=this.value;renderPatients(window._patientFilter)">
+        </div>
+        <span id="patient-count" style="font-size:12px;color:var(--t3);white-space:nowrap"></span>
+      </div>
       <div class="tab-row">
         <button class="tab active" onclick="filterPatients('all',this)">All</button>
         <button class="tab" onclick="filterPatients('admitted',this)">Admitted</button>
