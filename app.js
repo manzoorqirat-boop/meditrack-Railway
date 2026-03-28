@@ -667,14 +667,14 @@ async function loadUsers(){
   try{
     const data=await api('GET','/api/accounts');
     if(!data||!data.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">No users yet.</td></tr>'; return; }
-    tbody.innerHTML=data.map(u=>`<tr>
+        tbody.innerHTML=data.map(u=>`<tr>
       <td><b>${u.name||'—'}</b></td>
       <td><span class="badge">${u.role||'—'}</span></td>
       <td style="font-family:monospace;font-size:13px">${u.username||'—'}</td>
-      <td style="font-size:12px;color:var(--text-2)">${u.email||'—'}</td>
+      <td style="font-size:12px;color:var(--t2)">${u.email||'—'}</td>
       <td>${u.dept||'—'}</td>
-      <td style="font-size:12px;color:var(--text-2)">${u.qual||'—'}</td>
-      <td style="font-size:12px;color:var(--text-2)">${u.created_at?new Date(u.created_at).toLocaleDateString():'—'}</td>
+      <td style="font-size:12px;color:var(--t2)">${u.qual||'—'}</td>
+      <td style="font-size:12px;color:var(--t2)">${u.created_at?new Date(u.created_at).toLocaleDateString('en-IN'):'—'}</td>
     </tr>`).join('');
   }catch(e){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:#dc2626">'+e.message+'</td></tr>'; }
 }
