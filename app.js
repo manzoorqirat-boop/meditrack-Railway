@@ -160,7 +160,18 @@ function renderDashboard(){
   const todayAppts=(window._appointments||[]).filter(a=>a.date===todayStr).sort((a,b)=>a.time>b.time?1:-1);
   const dashAppt=document.getElementById('dash-appointments');
   if(dashAppt){
-    dashAppt.innerHTML=todayAppts.length?todayAppts.map(a=>`<div class="patient-row" style="cursor:pointer" onclick="filterAppts('today',null);showPage('appointments')"><div class="patient-info"><div class="avatar" style="background:var(--p)">${ini(a.patientName)}</div><div><div class="patient-name">${a.patientName}</div><div class="patient-meta">${a.time||'—'} · ${a.doctor?'Dr. '+a.doctor:'No doctor'} · ${a.dept||'General'}</div></div></div><span class="badge ${a.status==='completed'?'badge-ok':a.status==='cancelled'?'badge-gray':'badge-warn'}">${a.status}</span></div>`).join(''):'<div class="empty-state" style="cursor:pointer" onclick="showPage('appointments')">No appointments today. <span style="color:var(--p)">View all →</span></div>';
+    if(todayAppts.length){
+      dashAppt.innerHTML=todayAppts.map(function(a){
+        var badge=a.status==='completed'?'badge-ok':a.status==='cancelled'?'badge-gray':'badge-warn';
+        return '<div class="patient-row" style="cursor:pointer" onclick="filterAppts(\'today\',null);showPage(\'appointments\')">'
+          +'<div class="patient-info"><div class="avatar" style="background:var(--p)">'+ini(a.patientName)+'</div>'
+          +'<div><div class="patient-name">'+a.patientName+'</div>'
+          +'<div class="patient-meta">'+(a.time||'\u2014')+' &middot; '+(a.doctor?'Dr. '+a.doctor:'No doctor')+' &middot; '+(a.dept||'General')+'</div>'
+          +'</div></div><span class="badge '+badge+'">'+a.status+'</span></div>';
+      }).join('');
+    } else {
+      dashAppt.innerHTML='<div class="empty-state" style="cursor:pointer" onclick="showPage(\'appointments\')">No appointments today. Click to view all.</div>';
+    }
   }
 }
 
@@ -362,7 +373,7 @@ function renderStaffPage(){
     const bdg=s.role==='doctor'?'<span class="badge badge-info">Doctor</span>':s.role==='nurse'?'<span class="badge badge-ok">Nurse</span>':'<span class="badge badge-purple">Staff</span>';
     const sub=[s.qual,s.dept].filter(Boolean).join(' · ')||'—';
     const feeStr = s.role==='doctor'&&s.fee>0 ? `<span style="font-size:11px;color:var(--p);font-weight:600">₹${s.fee}</span>` : '';
-    const whBtn = isAdmin&&s.role==='doctor' ? `<button class="btn sm" style="margin-top:6px;font-size:10px" onclick="openWorkingHours('${s.id}','${s.name.replace(/'/g,'\\'')}')">⏰ Working Hours</button>` : '';
+        const safeName=s.name.replace(/'/g,"&#39;"); const whBtn = isAdmin&&s.role==='doctor' ? '<button class="btn sm" style="margin-top:6px;font-size:10px" onclick="openWorkingHours(\''+s.id+'\',\''+safeName+'\')">⏰ Working Hours</button>' : '';
     const whInfo = s.role==='doctor' ? `<div style="margin-top:4px">${whDisplay(s)}</div>` : '';
     return `<div class="staff-card">
       <div class="staff-card-top">
