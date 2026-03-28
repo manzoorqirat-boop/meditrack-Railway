@@ -329,6 +329,8 @@ textarea{resize:vertical;min-height:70px;}
 @media(max-width:768px){
   .topbar{padding:0 14px;height:54px;}
   .topbar>div:nth-child(2){display:none;}
+  .topbar .nav{display:none !important;}
+  .nav{display:none;}
   .hamburger{display:flex;}
   .bottom-nav{display:block;}
   .content{padding:16px 14px 88px;}
