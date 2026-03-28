@@ -538,7 +538,14 @@ app.post('/api/accounts/login', loginLimiter, async (req, res) => {
       return res.status(401).json({ ok:false, error:'Incorrect username or password.' });
     }
 
-    const user = r.rows[0];
+        const user = r.rows[0];
+
+    // Block inactive accounts
+    if (user.status === 'inactive') {
+      await audit({ username, userRole:user.role, event:'LOGIN_FAILED', record:'System',
+        oldValue:'Valid session', newValue:'Account deactivated', ip:req.ip });
+      return res.status(403).json({ ok:false, error:'Your account has been deactivated. Contact your administrator.' });
+    }
 
     // Check lockout
     if (user.locked_until && new Date(user.locked_until) > new Date()) {
