@@ -97,18 +97,15 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_staff_role    ON staff        (role);
   `);
 
-    // Add lockout columns if they don't exist (safe, idempotent)
-  await pool.query(`
-    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS failed_attempts INTEGER DEFAULT 0;
-    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
-  `);
-
-      // Add missing columns if not present
+  // Add missing columns if not present (safe, idempotent)
   await pool.query(`
     ALTER TABLE accounts ADD COLUMN IF NOT EXISTS failed_attempts INTEGER DEFAULT 0;
     ALTER TABLE accounts ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
     ALTER TABLE accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
   `);
+
+  // Fix existing empty email strings → NULL so unique constraint works
+  await pool.query(`UPDATE accounts SET email=NULL WHERE email=''`);
 
   // Migrate existing TEXT date columns to proper types (runs once, safe on re-deploy)
   try {
@@ -237,10 +234,10 @@ app.post('/api/patients', requireAuth, async (req, res) => {
         ip:req.ip });
     } else {
       const changes = [];
-      if (old.name      !== d.name)             changes.push(`Name: ${old.name} → ${d.name}`);
-      if (old.ward_id   !== d.wardId)           changes.push(`Ward: ${old.ward_id} → ${d.wardId}`);
-      if (old.doctor    !== d.doctor)           changes.push(`Doctor: ${old.doctor} → ${d.doctor}`);
-      if (old.diagnosis !== d.diagnosis)        changes.push(`Diagnosis updated`);
+      if (old.name      !== d.name)                 changes.push(`Name: ${old.name} → ${d.name}`);
+      if (old.ward_id   !== d.wardId)               changes.push(`Ward: ${old.ward_id} → ${d.wardId}`);
+      if (old.doctor    !== d.doctor)               changes.push(`Doctor: ${old.doctor} → ${d.doctor}`);
+      if (old.diagnosis !== d.diagnosis)            changes.push(`Diagnosis updated`);
       if (old.status    !== (d.status||'admitted')) changes.push(`Status: ${old.status} → ${d.status}`);
       await audit({ username:actor.username, userRole:actor.role, event:'PATIENT_UPDATED',
         record:d.name, oldValue:`Status:${old.status}`,
@@ -281,7 +278,6 @@ app.delete('/api/patients/:id', requireAuth, async (req, res) => {
 });
 
 // ── VITALS ────────────────────────────────────────────────────────────────────
-// Returns last 200 records by default; ?limit=N to override (max 500)
 app.get('/api/vitals', requireAuth, async (req, res) => {
   try {
     const limit = Math.min(500, parseInt(req.query.limit) || 200);
@@ -292,7 +288,6 @@ app.get('/api/vitals', requireAuth, async (req, res) => {
   } catch(e) { err(res,e); }
 });
 
-// Vitals for a single patient (used by patient detail / log vitals page)
 app.get('/api/vitals/patient/:patientId', requireAuth, async (req, res) => {
   try {
     const rows = (await pool.query(
@@ -303,7 +298,6 @@ app.get('/api/vitals/patient/:patientId', requireAuth, async (req, res) => {
   } catch(e) { err(res,e); }
 });
 
-// Paginated, filtered history — used by the History page
 app.get('/api/vitals/history', requireAuth, async (req, res) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page)  || 1);
@@ -311,9 +305,9 @@ app.get('/api/vitals/history', requireAuth, async (req, res) => {
     const skip  = (page - 1) * limit;
     const conds = [], params = [];
     let pi = 1;
-    if (req.query.patientId)     { conds.push(`patient_id=$${pi++}`); params.push(req.query.patientId); }
-    if (req.query.from)          { conds.push(`time>=$${pi++}`);      params.push(req.query.from); }
-    if (req.query.to)            { conds.push(`time<=$${pi++}`);      params.push(req.query.to+'T23:59:59'); }
+    if (req.query.patientId)        { conds.push(`patient_id=$${pi++}`); params.push(req.query.patientId); }
+    if (req.query.from)             { conds.push(`time>=$${pi++}`);      params.push(req.query.from); }
+    if (req.query.to)               { conds.push(`time<=$${pi++}`);      params.push(req.query.to+'T23:59:59'); }
     if (req.query.abnormal==='true') {
       conds.push(`(
         CAST(NULLIF(spo2,'')   AS NUMERIC) < 94  OR
@@ -484,11 +478,10 @@ app.delete('/api/appointments/:id', requireAuth, async (req, res) => {
 });
 
 // ── ACCOUNTS ──────────────────────────────────────────────────────────────────
-// No password in query string — protected by requireAdmin JWT middleware
 app.get('/api/accounts', requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT id,name,role,email,username,mobile,dept,emp_id,created_at FROM accounts ORDER BY created_at DESC'
+      'SELECT id,name,role,email,username,mobile,dept,emp_id,created_at,status FROM accounts ORDER BY created_at DESC'
     );
     ok(res, r.rows);
   } catch(e) { err(res,e); }
@@ -509,7 +502,7 @@ app.post('/api/accounts', requireAdmin, async (req, res) => {
     await pool.query(
       `INSERT INTO accounts (id,name,role,email,mobile,dept,emp_id,pw,created_at,username)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [d.id,d.name,d.role,d.email||'',d.mobile||'',d.dept||'',d.empId||'',
+      [d.id,d.name,d.role,d.email||null,d.mobile||'',d.dept||'',d.empId||'',
        hashedPw,d.createdAt||new Date().toISOString(),d.username]
     );
     await audit({ username:actor.username, userRole:actor.role, event:'USER_CREATED',
@@ -519,7 +512,7 @@ app.post('/api/accounts', requireAdmin, async (req, res) => {
   } catch(e) { err(res,e); }
 });
 
-// ── LOGIN — issues JWT + enforces rate limit & account lockout ────────────────
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
 app.post('/api/accounts/login', loginLimiter, async (req, res) => {
   const { username, pw } = req.body;
   const MAX_ATTEMPTS  = 5;
@@ -530,7 +523,6 @@ app.post('/api/accounts/login', loginLimiter, async (req, res) => {
 
     const r = await pool.query('SELECT * FROM accounts WHERE username=$1', [username]);
 
-    // Unknown username — dummy compare to prevent timing attacks
     if (r.rowCount === 0) {
       await bcrypt.compare(pw, '$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012345');
       await audit({ username, event:'LOGIN_FAILED', record:'System',
@@ -538,7 +530,7 @@ app.post('/api/accounts/login', loginLimiter, async (req, res) => {
       return res.status(401).json({ ok:false, error:'Incorrect username or password.' });
     }
 
-        const user = r.rows[0];
+    const user = r.rows[0];
 
     // Block inactive accounts
     if (user.status === 'inactive') {
@@ -582,7 +574,6 @@ app.post('/api/accounts/login', loginLimiter, async (req, res) => {
       return res.status(401).json({ ok:false, error:`Incorrect username or password. ${left} attempt${left > 1 ? 's' : ''} remaining.` });
     }
 
-    // Success — reset lockout counter, issue JWT
     await pool.query(
       'UPDATE accounts SET failed_attempts=0,locked_until=NULL WHERE id=$1',
       [user.id]
@@ -615,7 +606,6 @@ app.put('/api/accounts/:id/password', requireAuth, async (req, res) => {
   try {
     if (!newPw || newPw.length < 8)
       return res.status(400).json({ ok:false, error:'New password must be at least 8 characters.' });
-    // Users can only change their own password; admins can change anyone's
     if (actor.id !== req.params.id && actor.role !== 'admin')
       return res.status(403).json({ ok:false, error:'You can only change your own password.' });
     const r = await pool.query('SELECT * FROM accounts WHERE id=$1', [req.params.id]);
@@ -678,12 +668,11 @@ app.get('/api/audit/stats', requireAdmin, async (req, res) => {
 
 // ── USER STATUS MANAGEMENT (admin only) ──────────────────────────────────────
 app.put('/api/accounts/:id/status', requireAdmin, async (req, res) => {
-  const { status } = req.body; // 'active' or 'inactive'
+  const { status } = req.body;
   const actor = req.user;
   try {
     if (!['active','inactive'].includes(status))
       return res.status(400).json({ ok:false, error:'Status must be active or inactive.' });
-    // Prevent admin from deactivating their own account
     if (req.params.id === actor.id)
       return res.status(403).json({ ok:false, error:'You cannot deactivate your own account.' });
     const r = await pool.query('SELECT * FROM accounts WHERE id=$1', [req.params.id]);
@@ -699,7 +688,7 @@ app.put('/api/accounts/:id/status', requireAdmin, async (req, res) => {
   } catch(e) { err(res,e); }
 });
 
-// ── STAFF SYNC — copies accounts → staff table (run once after migration) ─────
+// ── STAFF SYNC ────────────────────────────────────────────────────────────────
 app.post('/api/admin/sync-staff', requireAdmin, async (req, res) => {
   try {
     const accounts = await pool.query(
@@ -715,7 +704,7 @@ app.post('/api/admin/sync-staff', requireAdmin, async (req, res) => {
           [staffId, a.name, a.role==='pharmacist'?'staff':a.role, a.dept||'', a.qual||'', a.mobile||'']
         );
         synced++;
-        await new Promise(r => setTimeout(r, 5)); // avoid duplicate IDs
+        await new Promise(r => setTimeout(r, 5));
       }
     }
     ok(res, { synced, message: `${synced} staff members synced.` });
